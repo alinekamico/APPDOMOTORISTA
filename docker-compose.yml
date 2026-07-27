@@ -1,0 +1,60 @@
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: kami_romaneios
+      MYSQL_USER: kami
+      MYSQL_PASSWORD: kami
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: mysql+pymysql://kami:kami@mysql:3306/kami_romaneios
+      JWT_SECRET: troque-este-valor-em-producao-para-uma-chave-aleatoria-longa
+      JWT_ALGORITHM: HS256
+      JWT_EXPIRE_MINUTES: "480"
+      PASSWORD_RESET_EXPIRE_MINUTES: "30"
+      APP_BASE_URL: http://localhost:3000
+      TMS_WEBHOOK_TOKEN: troque-este-token
+      INTEGRATION_ADAPTER_MAPS: fake
+      INTEGRATION_ADAPTER_UNO: stub
+      INTEGRATION_ADAPTER_NPS: stub
+      UPLOAD_DIR: /app/uploads
+      # Credenciais do usuário demo criado automaticamente no primeiro start:
+      ADMIN_NOME: Aline
+      ADMIN_EMAIL: aline@kamico.com.br
+      ADMIN_SENHA: TrocarDepois123!
+    ports:
+      - "8000:8000"
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  mysql_data:
+  uploads_data:
