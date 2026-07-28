@@ -23,6 +23,11 @@ Mapeamento de `situacao` confirmado com a KAMI (romaneios de exemplo conferidos 
 
 CNPJ é comparado só pelos dígitos (romaneio_service._somente_digitos) porque o UNO manda
 sem pontuação.
+
+Transportadora "teste"/"TESTE" no UNO é dado de teste/lixo (CNPJ de dígitos repetidos) —
+excluída direto na query. Já "Retirada" (cliente retira no balcão) também usa CNPJ de
+dígitos repetidos mas é um registro legítimo — tratada à parte em
+cadastro_service.sincronizar_transportadoras_da_fonte_externa (NOME_RETIRADA).
 """
 
 from sqlalchemy import create_engine, text
@@ -63,6 +68,7 @@ QUERY_ROMANEIOS = """
     LEFT JOIN unia.cd_tipo_veiculo tv ON tv.cod_tp_veiculo = r.cod_tp_veiculo
     LEFT JOIN unia.cd_empresa e ON e.cod_empresa = r.cod_empresa
     WHERE r.situacao = 10
+      AND lower(trim(t.nome_fantasia)) != 'teste'
     ORDER BY r.cod_romaneio_entrega DESC
 """
 

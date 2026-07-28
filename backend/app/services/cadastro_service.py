@@ -50,6 +50,9 @@ def criar_transportadora(
     return transportadora
 
 
+NOME_RETIRADA = "retirada"
+
+
 def _cnpj_valido(digitos: str) -> bool:
     """Descarta CNPJs claramente inválidos/de teste (todos os dígitos iguais, ex:
     '00000000000000' ou '11111111111111') — regra padrão de validação de CNPJ."""
@@ -78,7 +81,10 @@ def sincronizar_transportadoras_da_fonte_externa(db: Session, *, usuario_atual: 
             continue
         vistas.add(digitos)
 
-        if externa.nome_fantasia.strip().lower() == "teste" or not _cnpj_valido(digitos):
+        nome_normalizado = externa.nome_fantasia.strip().lower()
+        # "Retirada" (cliente retira no balcão, sem transportadora de verdade) usa um CNPJ
+        # de dígitos repetidos no UNO, mas é um registro legítimo e recorrente — não é lixo/teste.
+        if nome_normalizado == "teste" or (not _cnpj_valido(digitos) and nome_normalizado != NOME_RETIRADA):
             descartadas.append(externa.nome_fantasia)
             continue
 
