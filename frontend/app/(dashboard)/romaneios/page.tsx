@@ -24,6 +24,12 @@ export default function RomaneiosPage() {
   const [importando, setImportando] = useState(false);
   const [resultadoImportacao, setResultadoImportacao] = useState<ResultadoImportacao | null>(null);
   const [erroImportacao, setErroImportacao] = useState<string | null>(null);
+  const [busca, setBusca] = useState("");
+
+  const buscaNormalizada = busca.trim().toLowerCase();
+  const romaneiosFiltrados = romaneios?.filter(
+    (r) => !buscaNormalizada || r.codigo.toLowerCase().includes(buscaNormalizada)
+  );
 
   async function handleBuscarUno() {
     setErroImportacao(null);
@@ -97,9 +103,24 @@ export default function RomaneiosPage() {
         </div>
       )}
 
+      <div className="mb-4">
+        <input
+          type="text"
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          placeholder="Pesquisar romaneio pelo código..."
+          className="w-full max-w-xs rounded-lg border border-black/10 bg-white px-3 py-1.5 text-sm text-kami-charcoal placeholder:text-kami-charcoal-light/70 focus:border-kami-red focus:outline-none"
+        />
+        {buscaNormalizada && (
+          <p className="mt-1 text-xs text-kami-charcoal-light">
+            {romaneiosFiltrados?.length ?? 0} romaneio(s) encontrado(s) para &quot;{busca}&quot;
+          </p>
+        )}
+      </div>
+
       {carregando && <p className="text-sm text-kami-charcoal-light">Carregando...</p>}
       {erro && <p className="text-sm text-kami-red">{erro}</p>}
-      {romaneios && <Board romaneios={romaneios} />}
+      {romaneiosFiltrados && <Board romaneios={romaneiosFiltrados} />}
     </div>
   );
 }
