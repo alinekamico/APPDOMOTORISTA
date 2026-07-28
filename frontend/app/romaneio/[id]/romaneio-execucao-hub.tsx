@@ -198,31 +198,38 @@ export function RomaneioExecucaoHub({ romaneioId }: { romaneioId: number }) {
         {pedidosOrdenados.map((pedido) => {
           const finalizado = pedido.status_entrega === "entregue" || pedido.status_entrega === "nao_entregue";
           const conteudo = (
-            <div className="flex items-center justify-between rounded-xl border border-black/10 bg-white p-3">
-              <div>
-                <p className="text-sm font-medium text-kami-charcoal">
-                  {pedido.sequencia_atual}. {pedido.cliente_nome}
-                </p>
-                <p className="text-xs text-kami-charcoal-light">{pedido.cliente_endereco}</p>
-                {(pedido.peso_kg || pedido.qtd_volumes) && (
-                  <p className="text-xs text-kami-charcoal-light">
-                    {pedido.peso_kg ? `${pedido.peso_kg} kg` : null}
-                    {pedido.peso_kg && pedido.qtd_volumes ? " · " : null}
-                    {pedido.qtd_volumes ? `${pedido.qtd_volumes} ${pedido.especie_volume ?? "volume(s)"}` : null}
-                  </p>
-                )}
-              </div>
+            <div className="flex items-center gap-3 rounded-xl border border-black/10 bg-white p-3">
               <span
-                className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                  pedido.status_entrega === "entregue"
-                    ? "bg-green-100 text-green-700"
-                    : pedido.status_entrega === "nao_entregue"
-                      ? "bg-zinc-200 text-zinc-600"
-                      : "bg-kami-red/10 text-kami-red"
+                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+                  finalizado ? "bg-zinc-100 text-kami-charcoal-light" : "bg-kami-red/10 text-kami-red"
                 }`}
               >
-                {LABEL_ENTREGA[pedido.status_entrega]}
+                {pedido.sequencia_atual}
               </span>
+              <div className="flex flex-1 items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-medium text-kami-charcoal">{pedido.cliente_nome}</p>
+                  <p className="text-xs text-kami-charcoal-light">{pedido.cliente_endereco}</p>
+                  {(pedido.peso_kg || pedido.qtd_volumes) && (
+                    <p className="text-xs text-kami-charcoal-light">
+                      {pedido.peso_kg ? `${pedido.peso_kg} kg` : null}
+                      {pedido.peso_kg && pedido.qtd_volumes ? " · " : null}
+                      {pedido.qtd_volumes ? `${pedido.qtd_volumes} ${pedido.especie_volume ?? "volume(s)"}` : null}
+                    </p>
+                  )}
+                </div>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                    pedido.status_entrega === "entregue"
+                      ? "bg-green-100 text-green-700"
+                      : pedido.status_entrega === "nao_entregue"
+                        ? "bg-zinc-200 text-zinc-600"
+                        : "bg-kami-red/10 text-kami-red"
+                  }`}
+                >
+                  {LABEL_ENTREGA[pedido.status_entrega]}
+                </span>
+              </div>
             </div>
           );
 

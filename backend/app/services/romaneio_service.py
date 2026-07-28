@@ -156,6 +156,14 @@ def criar_de_comando(
         comando.pedidos, origem_lat=comando.origem_lat, origem_lng=comando.origem_lng
     )
 
+    # O UNO não sequencia boa parte dos pedidos (manda "ordem" zerada/repetida pra vários
+    # deles) — renumeramos 1..N na ordem em que chegaram (preservando a ordem parcial que o
+    # UNO deu, via QUERY_PEDIDOS ORDER BY ordem) pra garantir uma sequência sempre limpa e
+    # sem duplicatas exibida ao motorista. Quando _rotear_automaticamente já roteirizou de
+    # verdade (1..N sem lacunas), isso é um no-op.
+    for posicao, item in enumerate(pedidos_ordenados, start=1):
+        item.sequencia = posicao
+
     for item in pedidos_ordenados:
         pedido = Pedido(
             romaneio_id=romaneio.id,
