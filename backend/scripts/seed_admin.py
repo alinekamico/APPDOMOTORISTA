@@ -3,7 +3,9 @@
 Uso:
     python scripts/seed_admin.py --nome "Aline" --email aline@kamico.com.br --senha "TrocarDepois123!"
 
-Reexecutar com o mesmo e-mail não duplica — atualiza a senha do usuário existente.
+Reexecutar com o mesmo e-mail não faz nada além de confirmar que o usuário existe —
+a senha do usuário existente nunca é sobrescrita (evita resetar a senha real toda
+vez que o container é recriado em produção).
 """
 
 import argparse
@@ -29,9 +31,7 @@ def main() -> None:
     try:
         usuario = db.query(Usuario).filter(Usuario.email == args.email).one_or_none()
         if usuario:
-            usuario.senha_hash = hash_password(args.senha)
-            db.commit()
-            print(f"Usuário {args.email} já existia — senha atualizada.")
+            print(f"Usuário {args.email} já existia — senha mantida (não sobrescrita).")
             return
 
         usuario = Usuario(
