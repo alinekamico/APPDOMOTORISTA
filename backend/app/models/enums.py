@@ -8,6 +8,7 @@ class Papel(str, enum.Enum):
 
 
 class StatusRomaneio(str, enum.Enum):
+    DEFINICAO_TRANSPORTADORA = "definicao_transportadora"
     DEFINICAO_TRANSPORTE = "definicao_transporte"
     CONFERENCIA_LOGISTICA = "conferencia_logistica"
     CARREGAMENTO = "carregamento"

@@ -40,6 +40,16 @@ def criar(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
+@router.post("/sincronizar-uno")
+def sincronizar_uno(
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(require_roles(Papel.KAMI_ADMIN)),
+) -> dict:
+    """Busca todas as transportadoras cadastradas na réplica do UNO e cadastra as que
+    ainda não existem aqui."""
+    return cadastro_service.sincronizar_transportadoras_da_fonte_externa(db, usuario_atual=usuario_atual)
+
+
 @router.post("/{transportadora_id}/admins", response_model=UsuarioMeResponse, status_code=status.HTTP_201_CREATED)
 def criar_admin(
     transportadora_id: int,

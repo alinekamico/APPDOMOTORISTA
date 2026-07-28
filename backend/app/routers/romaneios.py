@@ -12,6 +12,7 @@ from app.repositories.tenant_scope import escopar_por_transportadora
 from app.schemas.romaneio import (
     AlocarVeiculoMotoristaRequest,
     AlterarTransportadoraRequest,
+    DefinirTransportadoraRequest,
     DevolverParaTransporteRequest,
     InserirPedidosRequest,
     ReportarProblemaRequest,
@@ -67,8 +68,9 @@ def importar_uno(
     db: Session = Depends(get_db),
     usuario_atual: Usuario = Depends(require_roles(Papel.KAMI_ADMIN)),
 ) -> dict:
-    """Busca romaneios na fonte externa configurada (réplica do UNO no Supabase, enquanto
-    o TMS não existe) e cria os que ainda não existem no sistema."""
+    """Força uma sincronização imediata com a fonte externa (réplica do UNO no Supabase,
+    enquanto o TMS não existe) — a sincronização automática já roda sozinha a cada 10
+    minutos (ver `uno_sync_scheduler`); este endpoint é só pra não esperar o próximo ciclo."""
     resultado = romaneio_service.importar_de_fonte_externa(db, usuario_atual=usuario_atual)
     return resultado.to_dict()
 
@@ -123,6 +125,25 @@ def alterar_transportadora(
             romaneio=romaneio,
             nova_transportadora_id=payload.transportadora_id,
             usuario_atual=usuario_atual,
+        )
+    except romaneio_service.TransicaoInvalidaError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except romaneio_service.TransportadoraInvalidaError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
+
+@router.post("/{romaneio_id}/definir-transportadora", response_model=RomaneioOut)
+def definir_transportadora(
+    romaneio_id: int,
+    payload: DefinirTransportadoraRequest,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(require_roles(Papel.KAMI_ADMIN)),
+) -> Romaneio:
+    """KAMI atribui a transportadora a um romaneio em 'definição da transportadora'."""
+    romaneio = _buscar_romaneio_do_tenant(db, romaneio_id, usuario_atual)
+    try:
+        return romaneio_service.definir_transportadora_inicial(
+            db, romaneio=romaneio, transportadora_id=payload.transportadora_id, usuario_atual=usuario_atual
         )
     except romaneio_service.TransicaoInvalidaError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc

@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api-client";
+import { PasswordInput } from "@/components/PasswordInput";
 
 export function RedefinirSenhaForm({ token }: { token: string }) {
   const router = useRouter();
@@ -57,26 +58,12 @@ export function RedefinirSenhaForm({ token }: { token: string }) {
 
       <label className="flex flex-col gap-1 text-sm">
         Nova senha
-        <input
-          type="password"
-          required
-          minLength={8}
-          value={novaSenha}
-          onChange={(e) => setNovaSenha(e.target.value)}
-          className="rounded-lg border border-black/10 px-3 py-2 outline-none focus:border-kami-red"
-        />
+        <PasswordInput required minLength={8} value={novaSenha} onChange={setNovaSenha} />
       </label>
 
       <label className="flex flex-col gap-1 text-sm">
         Confirmar nova senha
-        <input
-          type="password"
-          required
-          minLength={8}
-          value={confirmacao}
-          onChange={(e) => setConfirmacao(e.target.value)}
-          className="rounded-lg border border-black/10 px-3 py-2 outline-none focus:border-kami-red"
-        />
+        <PasswordInput required minLength={8} value={confirmacao} onChange={setConfirmacao} />
       </label>
 
       {erro && <p className="text-sm text-kami-red">{erro}</p>}

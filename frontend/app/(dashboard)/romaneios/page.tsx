@@ -10,6 +10,8 @@ import type { RomaneioResumo } from "@/components/kanban/types";
 
 type ResultadoImportacao = {
   importados: string[];
+  aguardando_transportadora: string[];
+  reatribuidos: string[];
   ignorados: { codigo: string; motivo: string }[];
 };
 
@@ -49,9 +51,10 @@ export default function RomaneiosPage() {
             <button
               onClick={handleBuscarUno}
               disabled={importando}
+              title="A sincronização com o UNO já roda automaticamente a cada 10 minutos — use isso só pra forçar agora"
               className="rounded-lg border border-kami-red/40 px-3 py-1.5 text-sm font-medium text-kami-red hover:bg-kami-red/5 disabled:opacity-60"
             >
-              {importando ? "Buscando..." : "Buscar romaneios do UNO"}
+              {importando ? "Sincronizando..." : "Forçar sincronização com o UNO"}
             </button>
             <Link
               href="/romaneios/novo"
@@ -70,6 +73,18 @@ export default function RomaneiosPage() {
             {resultadoImportacao.importados.length} romaneio(s) importado(s)
             {resultadoImportacao.importados.length > 0 && `: ${resultadoImportacao.importados.join(", ")}`}
           </p>
+          {resultadoImportacao.reatribuidos.length > 0 && (
+            <p className="mt-1 text-kami-charcoal">
+              {resultadoImportacao.reatribuidos.length} romaneio(s) que estavam aguardando transportadora
+              já foram movidos pra definição de transporte: {resultadoImportacao.reatribuidos.join(", ")}
+            </p>
+          )}
+          {resultadoImportacao.aguardando_transportadora.length > 0 && (
+            <p className="mt-1 text-kami-charcoal">
+              {resultadoImportacao.aguardando_transportadora.length} romaneio(s) aguardando definição de
+              transportadora: {resultadoImportacao.aguardando_transportadora.join(", ")}
+            </p>
+          )}
           {resultadoImportacao.ignorados.length > 0 && (
             <ul className="mt-1 text-kami-charcoal-light">
               {resultadoImportacao.ignorados.map((i, idx) => (

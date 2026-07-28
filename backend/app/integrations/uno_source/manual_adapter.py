@@ -1,4 +1,4 @@
-from app.integrations.uno_source.dto import RomaneioExternoDTO
+from app.integrations.uno_source.dto import RomaneioExternoDTO, TransportadoraExternaDTO
 
 
 class ManualRomaneioSource:
@@ -8,3 +8,9 @@ class ManualRomaneioSource:
 
     def buscar_romaneios_pendentes(self) -> list[RomaneioExternoDTO]:
         return []
+
+    def buscar_transportadoras(self) -> list[TransportadoraExternaDTO]:
+        return []
+
+    def buscar_empresas_por_referencia(self, referencias: list[str]) -> dict[str, tuple[str, str | None]]:
+        return {}

@@ -109,7 +109,7 @@ def criar_de_comando(
     if db.scalar(select(Romaneio).where(Romaneio.codigo == comando.codigo)):
         raise RomaneioDuplicadoError(f"Já existe um romaneio com o código {comando.codigo}")
 
-    if db.get(Transportadora, comando.transportadora_id) is None:
+    if comando.transportadora_id is not None and db.get(Transportadora, comando.transportadora_id) is None:
         raise TransportadoraInvalidaError("Transportadora informada não existe")
 
     # Se o cabeçalho não veio com qtd_caixas/peso_total explícitos (caso comum na importação
@@ -124,10 +124,21 @@ def criar_de_comando(
         soma_peso = sum(p.peso_kg or 0 for p in comando.pedidos)
         peso_total = soma_peso if soma_peso > 0 else None
 
+    # Sem transportadora casada (CNPJ desconhecido, ainda): entra em "definição da
+    # transportadora" pra KAMI atribuir manualmente — no futuro, com o cadastro de
+    # transportadoras completo, isso deixa de acontecer e vai direto pra definição de
+    # transporte, como já ocorre quando o CNPJ já é conhecido.
+    status_inicial = (
+        StatusRomaneio.DEFINICAO_TRANSPORTE
+        if comando.transportadora_id is not None
+        else StatusRomaneio.DEFINICAO_TRANSPORTADORA
+    )
+
     romaneio = Romaneio(
         codigo=comando.codigo,
         transportadora_id=comando.transportadora_id,
-        status=StatusRomaneio.DEFINICAO_TRANSPORTE,
+        transportadora_cnpj_externo=comando.transportadora_cnpj_externo,
+        status=status_inicial,
         origem=origem,
         tms_referencia_externa=comando.tms_referencia_externa,
         qtd_caixas=qtd_caixas,
@@ -135,6 +146,8 @@ def criar_de_comando(
         peso_total=peso_total,
         tipo_veiculo_sugerido=comando.tipo_veiculo_sugerido,
         data_saida_prevista=comando.data_saida_prevista,
+        empresa_nome=comando.empresa_nome,
+        empresa_uf=comando.empresa_uf,
     )
     db.add(romaneio)
     db.flush()
@@ -432,22 +445,32 @@ def inserir_pedidos(
 class ResultadoImportacao:
     def __init__(self) -> None:
         self.importados: list[str] = []
+        self.aguardando_transportadora: list[str] = []
+        self.reatribuidos: list[str] = []
         self.ignorados: list[dict] = []
 
     def to_dict(self) -> dict:
-        return {"importados": self.importados, "ignorados": self.ignorados}
+        return {
+            "importados": self.importados,
+            "aguardando_transportadora": self.aguardando_transportadora,
+            "reatribuidos": self.reatribuidos,
+            "ignorados": self.ignorados,
+        }
 
 
 def _somente_digitos(valor: str) -> str:
     return "".join(ch for ch in valor if ch.isdigit())
 
 
-def importar_de_fonte_externa(db: Session, *, usuario_atual: Usuario) -> ResultadoImportacao:
+def importar_de_fonte_externa(db: Session, *, usuario_atual: Usuario | None) -> ResultadoImportacao:
     """Busca romaneios na fonte externa configurada (hoje: réplica do UNO no Supabase;
     padrão: nenhuma, retorna vazio) e cria os que ainda não existem — casando a
     transportadora pelo CNPJ (comparado só pelos dígitos, já que o UNO manda sem pontuação
-    e o nosso cadastro guarda formatado). Duplicados (já importados) e CNPJ desconhecido são
-    reportados em `ignorados`, sem derrubar o restante do lote.
+    e o nosso cadastro guarda formatado). Quando o CNPJ ainda não bate com nenhuma
+    transportadora cadastrada, o romaneio é criado mesmo assim, em "definição da
+    transportadora", pra KAMI atribuir manualmente (`aguardando_transportadora`) — no
+    futuro, com o cadastro completo, isso deixa de acontecer. Duplicados (já importados)
+    são reportados em `ignorados`, sem derrubar o restante do lote.
     """
     from app.integrations.uno_source import get_romaneio_source
     from app.schemas.romaneio import PedidoCreateItem as _PedidoItem
@@ -461,27 +484,120 @@ def importar_de_fonte_externa(db: Session, *, usuario_atual: Usuario) -> Resulta
 
     for externo in externos:
         transportadora = transportadoras_por_cnpj.get(_somente_digitos(externo.transportadora_cnpj))
-        if transportadora is None:
-            resultado.ignorados.append(
-                {"codigo": externo.codigo, "motivo": f"CNPJ {externo.transportadora_cnpj} não cadastrado"}
-            )
-            continue
 
         comando = RomaneioCriarRequest(
             codigo=externo.codigo,
-            transportadora_id=transportadora.id,
+            transportadora_id=transportadora.id if transportadora else None,
+            transportadora_cnpj_externo=None if transportadora else externo.transportadora_cnpj,
             qtd_caixas=externo.qtd_caixas,
             peso_total=externo.peso_total,
             tms_referencia_externa=externo.referencia_externa,
             tipo_veiculo_sugerido=externo.tipo_veiculo_sugerido,
             data_saida_prevista=externo.data_saida_prevista,
+            empresa_nome=externo.empresa_nome,
+            empresa_uf=externo.empresa_uf,
             pedidos=[_PedidoItem(**p.model_dump()) for p in externo.pedidos],
         )
 
         try:
             criar_de_comando(db, comando=comando, origem=OrigemRomaneio.UNO_REPLICA, usuario_atual=usuario_atual)
-            resultado.importados.append(externo.codigo)
+            if transportadora:
+                resultado.importados.append(externo.codigo)
+            else:
+                resultado.aguardando_transportadora.append(externo.codigo)
         except RomaneioDuplicadoError:
             resultado.ignorados.append({"codigo": externo.codigo, "motivo": "já importado anteriormente"})
 
+    resultado.reatribuidos = _reatribuir_transportadoras_pendentes(db, usuario_atual=usuario_atual)
+    _backfill_empresa_romaneios_uno(db)
+
     return resultado
+
+
+def _backfill_empresa_romaneios_uno(db: Session) -> int:
+    """Preenche empresa_nome/empresa_uf de romaneios do UNO importados antes desse campo
+    existir — não precisa reimportar (o que daria duplicado), só busca a empresa pela
+    referência externa já salva e completa o que faltava."""
+    from app.integrations.uno_source import get_romaneio_source
+
+    sem_empresa = db.scalars(
+        select(Romaneio).where(
+            Romaneio.origem == OrigemRomaneio.UNO_REPLICA,
+            Romaneio.empresa_nome.is_(None),
+            Romaneio.tms_referencia_externa.isnot(None),
+        )
+    ).all()
+    if not sem_empresa:
+        return 0
+
+    referencias = [r.tms_referencia_externa for r in sem_empresa]
+    empresas_por_referencia = get_romaneio_source().buscar_empresas_por_referencia(referencias)
+
+    atualizados = 0
+    for romaneio in sem_empresa:
+        dados = empresas_por_referencia.get(romaneio.tms_referencia_externa)
+        if dados is None:
+            continue
+        romaneio.empresa_nome, romaneio.empresa_uf = dados
+        atualizados += 1
+
+    if atualizados:
+        db.commit()
+    return atualizados
+
+
+def _reatribuir_transportadoras_pendentes(db: Session, *, usuario_atual: Usuario | None) -> list[str]:
+    """Reavalia romaneios já importados que ficaram em 'definição da transportadora'
+    (CNPJ não cadastrado na época) contra o cadastro atual de transportadoras — assim,
+    cadastrar a transportadora depois já resolve o backlog sozinho, sem precisar reimportar
+    o romaneio (que já existe e daria `RomaneioDuplicadoError` se tentássemos de novo)."""
+    pendentes = db.scalars(
+        select(Romaneio).where(Romaneio.status == StatusRomaneio.DEFINICAO_TRANSPORTADORA)
+    ).all()
+    if not pendentes:
+        return []
+
+    transportadoras_por_cnpj = {
+        _somente_digitos(t.cnpj): t for t in db.scalars(select(Transportadora)).all()
+    }
+
+    reatribuidos = []
+    for romaneio in pendentes:
+        if not romaneio.transportadora_cnpj_externo:
+            continue
+        transportadora = transportadoras_por_cnpj.get(_somente_digitos(romaneio.transportadora_cnpj_externo))
+        if transportadora is None:
+            continue
+
+        romaneio.transportadora_id = transportadora.id
+        _transicionar(
+            db, romaneio=romaneio, novo_status=StatusRomaneio.DEFINICAO_TRANSPORTE, usuario_atual=usuario_atual
+        )
+        reatribuidos.append(romaneio.codigo)
+
+    if reatribuidos:
+        db.commit()
+    return reatribuidos
+
+
+def definir_transportadora_inicial(
+    db: Session, *, romaneio: Romaneio, transportadora_id: int, usuario_atual: Usuario
+) -> Romaneio:
+    """KAMI atribui a transportadora a um romaneio em 'definição da transportadora' (veio
+    do UNO com CNPJ que ainda não batia com nenhum cadastro) — transiciona direto pra
+    definição de transporte, como se já tivesse vindo casado desde o início."""
+    if romaneio.status != StatusRomaneio.DEFINICAO_TRANSPORTADORA:
+        raise TransicaoInvalidaError("Romaneio não está em definição da transportadora")
+
+    transportadora = db.get(Transportadora, transportadora_id)
+    if transportadora is None:
+        raise TransportadoraInvalidaError("Transportadora informada não existe")
+
+    romaneio.transportadora_id = transportadora_id
+    _transicionar(
+        db, romaneio=romaneio, novo_status=StatusRomaneio.DEFINICAO_TRANSPORTE, usuario_atual=usuario_atual
+    )
+
+    db.commit()
+    db.refresh(romaneio)
+    return romaneio

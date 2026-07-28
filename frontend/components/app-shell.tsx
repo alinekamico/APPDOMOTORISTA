@@ -57,6 +57,17 @@ function IconMotoristas() {
   );
 }
 
+function IconUsuarios() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-5 w-5">
+      <circle cx="7" cy="6.5" r="2.5" />
+      <path d="M2 17c0-2.8 2.2-5 5-5s5 2.2 5 5" strokeLinecap="round" />
+      <circle cx="14.5" cy="7" r="2" />
+      <path d="M12.5 12.3c2.6.3 4.5 2.3 4.5 4.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function IconMinhaRota() {
   return (
     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-5 w-5">
@@ -72,6 +83,7 @@ const NAV_ITEMS: { href: string; label: string; papeis: Papel[]; Icon: () => Rea
   { href: "/ocorrencias", label: "Ocorrências", papeis: ["kami_admin"], Icon: IconOcorrencias },
   { href: "/veiculos", label: "Veículos", papeis: ["kami_admin", "transportadora_admin"], Icon: IconVeiculos },
   { href: "/motoristas", label: "Motoristas", papeis: ["kami_admin", "transportadora_admin"], Icon: IconMotoristas },
+  { href: "/usuarios", label: "Usuários", papeis: ["kami_admin"], Icon: IconUsuarios },
   { href: "/minha-rota", label: "Minha rota", papeis: ["motorista"], Icon: IconMinhaRota },
 ];
 

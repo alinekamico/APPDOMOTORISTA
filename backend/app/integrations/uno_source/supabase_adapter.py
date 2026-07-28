@@ -26,7 +26,26 @@ Ainda em aberto (não bloqueia o uso, mas vale revisar):
 from sqlalchemy import create_engine, text
 
 from app.core.config import get_settings
-from app.integrations.uno_source.dto import PedidoExternoDTO, RomaneioExternoDTO
+from app.integrations.uno_source.dto import PedidoExternoDTO, RomaneioExternoDTO, TransportadoraExternaDTO
+
+QUERY_TRANSPORTADORAS = """
+    SELECT
+        t.cnpj,
+        t.razao_social,
+        t.nome_fantasia
+    FROM unia.cd_transportadora t
+    WHERE t.cnpj IS NOT NULL
+"""
+
+QUERY_EMPRESAS_POR_REFERENCIA = """
+    SELECT
+        r.cod_romaneio_entrega AS referencia_externa,
+        e.nome_fantasia AS empresa_nome,
+        e.sigla_uf AS empresa_uf
+    FROM unia.eq_romaneio_entrega r
+    LEFT JOIN unia.cd_empresa e ON e.cod_empresa = r.cod_empresa
+    WHERE r.cod_romaneio_entrega = ANY(:referencias)
+"""
 
 QUERY_ROMANEIOS = """
     SELECT
@@ -34,10 +53,13 @@ QUERY_ROMANEIOS = """
         COALESCE(r.doc_romaneio::text, r.cod_romaneio_entrega::text) AS codigo,
         t.cnpj AS transportadora_cnpj,
         r.dt_saida AS data_saida_prevista,
-        tv.descricao AS tipo_veiculo_sugerido
+        tv.descricao AS tipo_veiculo_sugerido,
+        e.nome_fantasia AS empresa_nome,
+        e.sigla_uf AS empresa_uf
     FROM unia.eq_romaneio_entrega r
     JOIN unia.cd_transportadora t ON t.cod_transportadora = r.cod_transportadora
     LEFT JOIN unia.cd_tipo_veiculo tv ON tv.cod_tp_veiculo = r.cod_tp_veiculo
+    LEFT JOIN unia.cd_empresa e ON e.cod_empresa = r.cod_empresa
     ORDER BY r.cod_romaneio_entrega DESC
     LIMIT 50
 """
@@ -113,7 +135,41 @@ class SupabaseUnoReplicaSource:
                         referencia_externa=str(linha["referencia_externa"]),
                         tipo_veiculo_sugerido=linha["tipo_veiculo_sugerido"],
                         data_saida_prevista=linha["data_saida_prevista"],
+                        empresa_nome=linha["empresa_nome"],
+                        empresa_uf=linha["empresa_uf"],
                         pedidos=pedidos,
                     )
                 )
             return romaneios
+
+    def buscar_transportadoras(self) -> list[TransportadoraExternaDTO]:
+        with self._engine.connect() as conn:
+            linhas = conn.execute(text(QUERY_TRANSPORTADORAS)).mappings().all()
+            return [
+                TransportadoraExternaDTO(
+                    cnpj=linha["cnpj"],
+                    razao_social=linha["razao_social"] or linha["nome_fantasia"] or linha["cnpj"],
+                    nome_fantasia=linha["nome_fantasia"] or linha["razao_social"] or linha["cnpj"],
+                )
+                for linha in linhas
+            ]
+
+    def buscar_empresas_por_referencia(self, referencias: list[str]) -> dict[str, tuple[str, str | None]]:
+        referencias_int = []
+        for r in referencias:
+            try:
+                referencias_int.append(int(r))
+            except (TypeError, ValueError):
+                continue
+        if not referencias_int:
+            return {}
+
+        with self._engine.connect() as conn:
+            linhas = conn.execute(
+                text(QUERY_EMPRESAS_POR_REFERENCIA), {"referencias": referencias_int}
+            ).mappings().all()
+            return {
+                str(linha["referencia_externa"]): (linha["empresa_nome"], linha["empresa_uf"])
+                for linha in linhas
+                if linha["empresa_nome"]
+            }

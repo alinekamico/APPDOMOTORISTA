@@ -28,6 +28,10 @@ class Usuario(Base):
         back_populates="usuario", cascade="all, delete-orphan"
     )
 
+    @property
+    def transportadora_nome(self) -> str | None:
+        return self.transportadora.nome_fantasia if self.transportadora else None
+
 
 class PasswordResetToken(Base):
     __tablename__ = "password_reset_tokens"

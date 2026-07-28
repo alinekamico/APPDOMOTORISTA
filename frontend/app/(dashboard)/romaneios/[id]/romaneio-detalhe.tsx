@@ -27,8 +27,9 @@ type FotoCarregamento = { id: number; foto_url: string; criado_em: string };
 type RomaneioDetalheType = {
   id: number;
   codigo: string;
-  transportadora_id: number;
-  transportadora_nome: string;
+  transportadora_id: number | null;
+  transportadora_nome: string | null;
+  transportadora_cnpj_externo: string | null;
   veiculo_id: number | null;
   veiculo_placa: string | null;
   motorista_id: number | null;
@@ -39,6 +40,8 @@ type RomaneioDetalheType = {
   peso_total: number | null;
   tipo_veiculo_sugerido: string | null;
   data_saida_prevista: string | null;
+  empresa_nome: string | null;
+  empresa_uf: string | null;
   fotos_carregamento: FotoCarregamento[];
   pedidos: Pedido[];
 };
@@ -67,7 +70,14 @@ export function RomaneioDetalhe({ romaneioId }: { romaneioId: number }) {
   const { data: motoristas } = useFetch<Motorista[]>(podeAlocar ? "/motoristas" : null);
 
   const podeTrocarTransportadora = usuario?.papel === "kami_admin" && romaneio?.status === "definicao_transporte";
-  const { data: transportadoras } = useFetch<Transportadora[]>(podeTrocarTransportadora ? "/transportadoras" : null);
+  const podeDefinirTransportadora =
+    usuario?.papel === "kami_admin" && romaneio?.status === "definicao_transportadora";
+  const { data: transportadoras } = useFetch<Transportadora[]>(
+    podeTrocarTransportadora || podeDefinirTransportadora ? "/transportadoras" : null
+  );
+
+  const [transportadoraEscolhidaId, setTransportadoraEscolhidaId] = useState("");
+  const [definindoTransportadora, setDefinindoTransportadora] = useState(false);
 
   const [veiculoId, setVeiculoId] = useState("");
   const [motoristaId, setMotoristaId] = useState("");
@@ -129,6 +139,25 @@ export function RomaneioDetalhe({ romaneioId }: { romaneioId: number }) {
       setAcaoErro(err instanceof ApiError ? err.detail : "Não foi possível trocar a transportadora.");
     } finally {
       setTrocandoTransportadora(false);
+    }
+  }
+
+  async function handleDefinirTransportadora(e: React.FormEvent) {
+    e.preventDefault();
+    if (!transportadoraEscolhidaId) return;
+    setAcaoErro(null);
+    setDefinindoTransportadora(true);
+    try {
+      await apiFetch(`/romaneios/${romaneioId}/definir-transportadora`, {
+        method: "POST",
+        body: { transportadora_id: Number(transportadoraEscolhidaId) },
+      });
+      setTransportadoraEscolhidaId("");
+      recarregar();
+    } catch (err) {
+      setAcaoErro(err instanceof ApiError ? err.detail : "Não foi possível definir a transportadora.");
+    } finally {
+      setDefinindoTransportadora(false);
     }
   }
 
@@ -195,7 +224,18 @@ export function RomaneioDetalhe({ romaneioId }: { romaneioId: number }) {
       <div className="mb-6 flex items-start justify-between">
         <div>
           <h1 className="text-lg font-semibold text-kami-charcoal">{romaneio.codigo}</h1>
-          <p className="text-sm text-kami-charcoal-light">{romaneio.transportadora_nome}</p>
+          {romaneio.empresa_nome && (
+            <p className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-kami-charcoal/5 px-2 py-0.5 text-xs font-medium text-kami-charcoal">
+              {romaneio.empresa_nome}
+              {romaneio.empresa_uf && <span className="text-kami-charcoal-light">· {romaneio.empresa_uf}</span>}
+            </p>
+          )}
+          <p className="mt-1 text-sm text-kami-charcoal-light">
+            {romaneio.transportadora_nome ??
+              (romaneio.transportadora_cnpj_externo
+                ? `CNPJ ${romaneio.transportadora_cnpj_externo} não cadastrado`
+                : "Aguardando definição da transportadora")}
+          </p>
         </div>
         <span className="rounded-full bg-kami-red/10 px-3 py-1 text-xs font-medium text-kami-red">
           {LABEL_STATUS[romaneio.status] ?? romaneio.status}
@@ -238,6 +278,48 @@ export function RomaneioDetalhe({ romaneioId }: { romaneioId: number }) {
       </div>
 
       {acaoErro && <p className="mb-3 text-sm text-kami-red">{acaoErro}</p>}
+
+      {podeDefinirTransportadora && (
+        <form
+          onSubmit={handleDefinirTransportadora}
+          className="mb-6 flex flex-col gap-3 rounded-xl border border-black/10 bg-white p-4"
+        >
+          <h2 className="text-sm font-semibold text-kami-charcoal">Definir transportadora</h2>
+          <p className="text-xs text-kami-charcoal-light">
+            Esse romaneio veio do UNO com um CNPJ que ainda não bate com nenhuma transportadora
+            cadastrada
+            {romaneio.transportadora_cnpj_externo && (
+              <>
+                {" "}
+                (<strong>{romaneio.transportadora_cnpj_externo}</strong>)
+              </>
+            )}
+            . Escolha manualmente qual transportadora deve atender.
+          </p>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <select
+              required
+              value={transportadoraEscolhidaId}
+              onChange={(e) => setTransportadoraEscolhidaId(e.target.value)}
+              className="flex-1 rounded-lg border border-black/10 px-3 py-2 text-sm outline-none focus:border-kami-red"
+            >
+              <option value="">Selecione a transportadora...</option>
+              {transportadoras?.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.nome_fantasia}
+                </option>
+              ))}
+            </select>
+            <button
+              type="submit"
+              disabled={definindoTransportadora}
+              className="rounded-lg bg-kami-red px-3 py-1.5 text-sm font-medium text-white hover:bg-kami-red-dark disabled:opacity-60"
+            >
+              {definindoTransportadora ? "Definindo..." : "Definir"}
+            </button>
+          </div>
+        </form>
+      )}
 
       {podeTrocarTransportadora && (
         <form

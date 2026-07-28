@@ -6,24 +6,30 @@ import { useFetch } from "@/lib/use-fetch";
 import { apiFetch, ApiError } from "@/lib/api-client";
 import { PasswordInput } from "@/components/PasswordInput";
 
-type Motorista = {
+type Usuario = {
   id: number;
-  transportadora_nome: string;
   nome: string;
   email: string;
-  cnh: string;
-  cnh_categoria: string;
-  telefone: string;
+  papel: "kami_admin" | "transportadora_admin" | "motorista";
+  departamento: string | null;
+  transportadora_nome: string | null;
   ativo: boolean;
+  criado_em: string;
+  last_login_at: string | null;
 };
 
-const CAMPOS_INICIAIS = { nome: "", email: "", senha: "", cnh: "", cnh_categoria: "", telefone: "" };
+const LABEL_PAPEL: Record<Usuario["papel"], string> = {
+  kami_admin: "KAMI",
+  transportadora_admin: "Transportadora",
+  motorista: "Motorista",
+};
 
-export default function MotoristasPage() {
-  const { usuario, carregando: carregandoAuth } = useRequireRole(["kami_admin", "transportadora_admin"]);
-  const somenteLeitura = usuario?.papel === "kami_admin";
-  const { data: motoristas, carregando, erro, recarregar } = useFetch<Motorista[]>(
-    carregandoAuth ? null : "/motoristas"
+const CAMPOS_INICIAIS = { nome: "", email: "", senha: "", departamento: "" };
+
+export default function UsuariosPage() {
+  const { carregando: carregandoAuth } = useRequireRole(["kami_admin"]);
+  const { data: usuarios, carregando, erro, recarregar } = useFetch<Usuario[]>(
+    carregandoAuth ? null : "/usuarios"
   );
 
   const [mostrarForm, setMostrarForm] = useState(false);
@@ -45,35 +51,32 @@ export default function MotoristasPage() {
     setErroForm(null);
     setEnviando(true);
     try {
-      await apiFetch("/motoristas", { method: "POST", body: campos });
+      await apiFetch("/usuarios", {
+        method: "POST",
+        body: { ...campos, departamento: campos.departamento || null },
+      });
       setCampos(CAMPOS_INICIAIS);
       setMostrarForm(false);
       recarregar();
     } catch (err) {
-      setErroForm(err instanceof ApiError ? err.detail : "Não foi possível cadastrar o motorista.");
+      setErroForm(err instanceof ApiError ? err.detail : "Não foi possível cadastrar o usuário.");
     } finally {
       setEnviando(false);
     }
   }
 
-  async function handleToggleAtivo(motorista: Motorista) {
-    await apiFetch(`/motoristas/${motorista.id}`, { method: "PATCH", body: { ativo: !motorista.ativo } });
-    recarregar();
-  }
-
-  function handleAbrirReset(motoristaId: number) {
-    setResetandoId(motoristaId);
+  function handleAbrirReset(usuarioId: number) {
+    setResetandoId(usuarioId);
     setNovaSenha("");
     setErroSenha(null);
   }
 
   function handleCancelarReset() {
     setResetandoId(null);
-    setNovaSenha("");
     setErroSenha(null);
   }
 
-  async function handleSalvarSenha(motoristaId: number) {
+  async function handleSalvarSenha(usuarioId: number) {
     if (novaSenha.length < 8) {
       setErroSenha("A senha precisa ter ao menos 8 caracteres.");
       return;
@@ -81,11 +84,11 @@ export default function MotoristasPage() {
     setErroSenha(null);
     setSalvandoSenha(true);
     try {
-      await apiFetch(`/motoristas/${motoristaId}`, { method: "PATCH", body: { senha: novaSenha } });
+      await apiFetch(`/usuarios/${usuarioId}/senha`, { method: "PATCH", body: { senha: novaSenha } });
       setResetandoId(null);
       setNovaSenha("");
     } catch (err) {
-      setErroSenha(err instanceof ApiError ? err.detail : "Não foi possível alterar a senha.");
+      setErroSenha(err instanceof ApiError ? err.detail : "Não foi possível redefinir a senha.");
     } finally {
       setSalvandoSenha(false);
     }
@@ -94,32 +97,23 @@ export default function MotoristasPage() {
   if (carregandoAuth) return null;
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="mx-auto max-w-4xl">
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-semibold text-kami-charcoal">Motoristas</h1>
-          {somenteLeitura ? (
-            <p className="text-xs text-kami-charcoal-light">
-              Visão de todas as transportadoras — só a própria transportadora pode cadastrar ou alterar.
-            </p>
-          ) : (
-            <p className="text-xs text-kami-charcoal-light">
-              O motorista também é um usuário do sistema — ele só consegue entrar no app depois que
-              você liberar o acesso dele aqui.
-            </p>
-          )}
+          <h1 className="text-lg font-semibold text-kami-charcoal">Usuários</h1>
+          <p className="text-xs text-kami-charcoal-light">
+            Todos os usuários do sistema — KAMI, transportadoras e motoristas. Só a KAMI enxerga essa tela.
+          </p>
         </div>
-        {!somenteLeitura && (
-          <button
-            onClick={() => setMostrarForm((v) => !v)}
-            className="rounded-lg bg-kami-red px-3 py-1.5 text-sm font-medium text-white hover:bg-kami-red-dark"
-          >
-            {mostrarForm ? "Cancelar" : "Novo motorista"}
-          </button>
-        )}
+        <button
+          onClick={() => setMostrarForm((v) => !v)}
+          className="rounded-lg bg-kami-red px-3 py-1.5 text-sm font-medium text-white hover:bg-kami-red-dark"
+        >
+          {mostrarForm ? "Cancelar" : "Novo usuário KAMI"}
+        </button>
       </div>
 
-      {mostrarForm && !somenteLeitura && (
+      {mostrarForm && (
         <form onSubmit={handleCriar} className="mb-6 flex flex-col gap-3 rounded-xl border border-black/10 bg-white p-4">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="flex flex-col gap-1 text-sm">
@@ -143,39 +137,14 @@ export default function MotoristasPage() {
             </label>
             <label className="flex flex-col gap-1 text-sm">
               Senha provisória
-              <PasswordInput
-                required
-                minLength={8}
-                value={campos.senha}
-                onChange={(v) => setCampo("senha", v)}
-              />
+              <PasswordInput required minLength={8} value={campos.senha} onChange={(v) => setCampo("senha", v)} />
             </label>
             <label className="flex flex-col gap-1 text-sm">
-              Telefone
+              Departamento
               <input
-                required
-                value={campos.telefone}
-                onChange={(e) => setCampo("telefone", e.target.value)}
-                placeholder="(11) 90000-0000"
-                className="rounded-lg border border-black/10 px-3 py-2 outline-none focus:border-kami-red"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              CNH
-              <input
-                required
-                value={campos.cnh}
-                onChange={(e) => setCampo("cnh", e.target.value)}
-                className="rounded-lg border border-black/10 px-3 py-2 outline-none focus:border-kami-red"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              Categoria CNH
-              <input
-                required
-                value={campos.cnh_categoria}
-                onChange={(e) => setCampo("cnh_categoria", e.target.value)}
-                placeholder="B, D, E..."
+                value={campos.departamento}
+                onChange={(e) => setCampo("departamento", e.target.value)}
+                placeholder="Tecnologia da Informação, Operações..."
                 className="rounded-lg border border-black/10 px-3 py-2 outline-none focus:border-kami-red"
               />
             </label>
@@ -198,64 +167,48 @@ export default function MotoristasPage() {
         <table className="w-full text-left text-sm">
           <thead className="bg-zinc-50 text-kami-charcoal-light">
             <tr>
-              {somenteLeitura && <th className="px-4 py-2 font-medium">Transportadora</th>}
               <th className="px-4 py-2 font-medium">Nome</th>
-              <th className="px-4 py-2 font-medium">Contato</th>
-              <th className="px-4 py-2 font-medium">CNH</th>
+              <th className="px-4 py-2 font-medium">E-mail</th>
+              <th className="px-4 py-2 font-medium">Papel</th>
+              <th className="px-4 py-2 font-medium">Departamento / Transportadora</th>
               <th className="px-4 py-2 font-medium">Status</th>
-              {!somenteLeitura && <th className="px-4 py-2" />}
+              <th className="px-4 py-2" />
             </tr>
           </thead>
           <tbody>
-            {motoristas?.map((m) => (
-              <Fragment key={m.id}>
+            {usuarios?.map((u) => (
+              <Fragment key={u.id}>
                 <tr className="border-t border-black/5">
-                  {somenteLeitura && (
-                    <td className="px-4 py-2 text-kami-charcoal-light">{m.transportadora_nome}</td>
-                  )}
-                  <td className="px-4 py-2 font-medium">{m.nome}</td>
+                  <td className="px-4 py-2 font-medium">{u.nome}</td>
+                  <td className="px-4 py-2 text-kami-charcoal-light">{u.email}</td>
+                  <td className="px-4 py-2 text-kami-charcoal-light">{LABEL_PAPEL[u.papel]}</td>
                   <td className="px-4 py-2 text-kami-charcoal-light">
-                    {m.email}
-                    <br />
-                    {m.telefone}
-                  </td>
-                  <td className="px-4 py-2 text-kami-charcoal-light">
-                    {m.cnh} · {m.cnh_categoria}
+                    {u.transportadora_nome ?? u.departamento ?? "—"}
                   </td>
                   <td className="px-4 py-2">
                     <span
                       className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                        m.ativo ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
+                        u.ativo ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
                       }`}
                     >
-                      {m.ativo ? "Acesso liberado" : "Aguardando liberação"}
+                      {u.ativo ? "Ativo" : "Inativo"}
                     </span>
                   </td>
-                  {!somenteLeitura && (
-                    <td className="px-4 py-2 text-right">
-                      <div className="flex justify-end gap-3">
-                        <button
-                          onClick={() => handleAbrirReset(m.id)}
-                          className="text-xs font-medium text-kami-charcoal-light hover:text-kami-red"
-                        >
-                          Redefinir senha
-                        </button>
-                        <button
-                          onClick={() => handleToggleAtivo(m)}
-                          className="text-xs font-medium text-kami-charcoal-light hover:text-kami-red"
-                        >
-                          {m.ativo ? "Bloquear acesso" : "Liberar acesso"}
-                        </button>
-                      </div>
-                    </td>
-                  )}
+                  <td className="px-4 py-2 text-right">
+                    <button
+                      onClick={() => handleAbrirReset(u.id)}
+                      className="text-xs font-medium text-kami-charcoal-light hover:text-kami-red"
+                    >
+                      Redefinir senha
+                    </button>
+                  </td>
                 </tr>
-                {resetandoId === m.id && !somenteLeitura && (
+                {resetandoId === u.id && (
                   <tr className="border-t border-black/5 bg-zinc-50">
-                    <td colSpan={somenteLeitura ? 5 : 5} className="px-4 py-3">
+                    <td colSpan={6} className="px-4 py-3">
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                         <span className="text-xs text-kami-charcoal-light">
-                          Nova senha para <strong>{m.nome}</strong>:
+                          Nova senha para <strong>{u.nome}</strong>:
                         </span>
                         <PasswordInput
                           autoFocus
@@ -267,7 +220,7 @@ export default function MotoristasPage() {
                         />
                         <div className="flex gap-2">
                           <button
-                            onClick={() => handleSalvarSenha(m.id)}
+                            onClick={() => handleSalvarSenha(u.id)}
                             disabled={salvandoSenha}
                             className="rounded-lg bg-kami-red px-3 py-1.5 text-xs font-medium text-white hover:bg-kami-red-dark disabled:opacity-60"
                           >
@@ -288,10 +241,10 @@ export default function MotoristasPage() {
                 )}
               </Fragment>
             ))}
-            {motoristas?.length === 0 && (
+            {usuarios?.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-kami-charcoal-light">
-                  Nenhum motorista cadastrado ainda.
+                <td colSpan={6} className="px-4 py-6 text-center text-kami-charcoal-light">
+                  Nenhum usuário cadastrado ainda.
                 </td>
               </tr>
             )}

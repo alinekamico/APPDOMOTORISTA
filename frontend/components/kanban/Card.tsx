@@ -17,7 +17,18 @@ export function Card({ romaneio }: { romaneio: RomaneioResumo }) {
           </span>
         )}
       </div>
-      <p className="text-xs text-kami-charcoal-light">{romaneio.transportadora_nome}</p>
+      {romaneio.empresa_nome && (
+        <p className="mb-1 inline-flex items-center gap-1 rounded-full bg-kami-charcoal/5 px-2 py-0.5 text-xs font-medium text-kami-charcoal">
+          {romaneio.empresa_nome}
+          {romaneio.empresa_uf && <span className="text-kami-charcoal-light">· {romaneio.empresa_uf}</span>}
+        </p>
+      )}
+      <p className="text-xs text-kami-charcoal-light">
+        {romaneio.transportadora_nome ??
+          (romaneio.transportadora_cnpj_externo
+            ? `CNPJ ${romaneio.transportadora_cnpj_externo} não cadastrado`
+            : "Aguardando definição")}
+      </p>
       {(romaneio.motorista_nome || romaneio.veiculo_placa) && (
         <p className="mt-1 text-xs text-kami-charcoal-light">
           {romaneio.motorista_nome ?? "—"} · {romaneio.veiculo_placa ?? "—"}

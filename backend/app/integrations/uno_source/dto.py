@@ -23,6 +23,14 @@ class PedidoExternoDTO(BaseModel):
     dt_entrega_solicitada: date | None = None
 
 
+class TransportadoraExternaDTO(BaseModel):
+    """Cadastro de transportadora como vem da fonte externa (UNO)."""
+
+    cnpj: str
+    razao_social: str
+    nome_fantasia: str
+
+
 class RomaneioExternoDTO(BaseModel):
     """Um romaneio como vem da fonte externa (UNO). Usa `transportadora_cnpj` (chave de
     negócio) em vez de `transportadora_id` porque o UNO não conhece nosso ID interno —
@@ -36,4 +44,8 @@ class RomaneioExternoDTO(BaseModel):
     peso_total: float | None = None
     tipo_veiculo_sugerido: str | None = None
     data_saida_prevista: datetime | None = None
+    # De qual empresa (dentro do grupo KAMI, no UNO) esse romaneio saiu — o UNO tem 30+
+    # empresas cadastradas, então mostrar nome + UF ajuda a identificar de longe.
+    empresa_nome: str | None = None
+    empresa_uf: str | None = None
     pedidos: list[PedidoExternoDTO]

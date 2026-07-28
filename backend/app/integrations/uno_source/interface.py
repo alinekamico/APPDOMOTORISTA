@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from app.integrations.uno_source.dto import RomaneioExternoDTO
+from app.integrations.uno_source.dto import RomaneioExternoDTO, TransportadoraExternaDTO
 
 
 class RomaneioSource(Protocol):
@@ -16,3 +16,10 @@ class RomaneioSource(Protocol):
     """
 
     def buscar_romaneios_pendentes(self) -> list[RomaneioExternoDTO]: ...
+
+    def buscar_transportadoras(self) -> list[TransportadoraExternaDTO]: ...
+
+    def buscar_empresas_por_referencia(self, referencias: list[str]) -> dict[str, tuple[str, str | None]]:
+        """Mapa `referencia_externa -> (empresa_nome, empresa_uf)`, pra preencher
+        romaneios já importados antes do campo empresa existir."""
+        ...

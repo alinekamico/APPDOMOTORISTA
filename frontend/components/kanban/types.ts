@@ -1,4 +1,5 @@
 export type StatusRomaneio =
+  | "definicao_transportadora"
   | "definicao_transporte"
   | "conferencia_logistica"
   | "carregamento"
@@ -11,8 +12,9 @@ export type StatusRomaneio =
 export type RomaneioResumo = {
   id: number;
   codigo: string;
-  transportadora_id: number;
-  transportadora_nome: string;
+  transportadora_id: number | null;
+  transportadora_nome: string | null;
+  transportadora_cnpj_externo?: string | null;
   veiculo_id: number | null;
   veiculo_placa: string | null;
   motorista_id: number | null;
@@ -23,10 +25,13 @@ export type RomaneioResumo = {
   peso_total: number | null;
   tipo_veiculo_sugerido: string | null;
   data_saida_prevista: string | null;
+  empresa_nome?: string | null;
+  empresa_uf?: string | null;
   criado_em: string;
 };
 
 export const COLUNAS: { status: StatusRomaneio; titulo: string; responsavel: string }[] = [
+  { status: "definicao_transportadora", titulo: "Definição da Transportadora", responsavel: "KAMI" },
   { status: "definicao_transporte", titulo: "Definição de Transporte", responsavel: "Transportadora" },
   { status: "conferencia_logistica", titulo: "Conferência Logística", responsavel: "KAMI" },
   { status: "carregamento", titulo: "Carregamento", responsavel: "Motorista" },
