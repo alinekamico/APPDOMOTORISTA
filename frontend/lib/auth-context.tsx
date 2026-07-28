@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { apiFetch, ApiError, getStoredToken, setStoredToken } from "@/lib/api-client";
+import { apiFetch, ApiError, getStoredToken, setStoredToken, setStoredRefreshToken } from "@/lib/api-client";
 
 export type Papel = "kami_admin" | "transportadora_admin" | "motorista";
 
@@ -54,12 +54,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (email: string, senha: string) => {
     const resposta = await apiFetch<{
       access_token: string;
+      refresh_token: string;
       papel: Papel;
       nome: string;
       transportadora_id: number | null;
     }>("/auth/login", { method: "POST", body: { email, senha }, auth: false });
 
     setStoredToken(resposta.access_token);
+    setStoredRefreshToken(resposta.refresh_token);
     const me = await apiFetch<Usuario>("/auth/me");
     setUsuario(me);
     return me;
@@ -67,6 +69,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(() => {
     setStoredToken(null);
+    setStoredRefreshToken(null);
     setUsuario(null);
   }, []);
 

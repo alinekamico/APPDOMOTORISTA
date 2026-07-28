@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user
@@ -8,6 +8,8 @@ from app.schemas.auth import (
     EsqueciSenhaRequest,
     LoginRequest,
     RedefinirSenhaRequest,
+    RefreshRequest,
+    RefreshResponse,
     TokenResponse,
     UsuarioMeResponse,
 )
@@ -17,24 +19,29 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)) -> TokenResponse:
+def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
     try:
-        usuario, token = auth_service.autenticar(
-            db,
-            email=payload.email,
-            senha=payload.senha,
-            ip=request.client.host if request.client else None,
-            user_agent=request.headers.get("user-agent"),
-        )
+        usuario, access_token, refresh_token = auth_service.autenticar(db, email=payload.email, senha=payload.senha)
     except auth_service.CredenciaisInvalidasError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
 
     return TokenResponse(
-        access_token=token,
+        access_token=access_token,
+        refresh_token=refresh_token,
         papel=usuario.papel,
         nome=usuario.nome,
         transportadora_id=usuario.transportadora_id,
     )
+
+
+@router.post("/refresh", response_model=RefreshResponse)
+def refresh(payload: RefreshRequest, db: Session = Depends(get_db)) -> RefreshResponse:
+    try:
+        _usuario, novo_access_token = auth_service.renovar_access_token(db, refresh_token=payload.refresh_token)
+    except auth_service.CredenciaisInvalidasError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
+
+    return RefreshResponse(access_token=novo_access_token)
 
 
 @router.post("/esqueci-senha", status_code=status.HTTP_202_ACCEPTED)

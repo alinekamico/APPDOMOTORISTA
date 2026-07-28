@@ -6,8 +6,12 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 from app.core.config import get_settings
+from app.middleware.request_context import RequestContextMiddleware, obter_ip_cliente
 from app.routers import (
     auth,
     motoristas,
@@ -35,9 +39,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="KAMI CO. — Romaneios", version="0.1.0", lifespan=lifespan)
 
+# Rate limiting (governança: 100 req/min por IP). key_func usa o IP real (atrás do nginx,
+# request.client.host seria o IP do proxy, não do cliente).
+limiter = Limiter(key_func=obter_ip_cliente, default_limits=[f"{settings.rate_limit_por_minuto}/minute"])
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+
+app.add_middleware(RequestContextMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3002"],
+    allow_origins=settings.cors_allowed_origins_lista,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

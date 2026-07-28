@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.security import (
     create_access_token,
+    create_refresh_token,
+    decode_refresh_token,
     generate_reset_token,
     hash_password,
     verify_password,
@@ -23,7 +25,7 @@ class CredenciaisInvalidasError(Exception):
     pass
 
 
-def autenticar(db: Session, *, email: str, senha: str, ip: str | None, user_agent: str | None) -> tuple[Usuario, str]:
+def autenticar(db: Session, *, email: str, senha: str) -> tuple[Usuario, str, str]:
     usuario = db.scalar(select(Usuario).where(Usuario.email == email))
 
     if usuario is None or not usuario.ativo or not verify_password(senha, usuario.senha_hash):
@@ -33,8 +35,6 @@ def autenticar(db: Session, *, email: str, senha: str, ip: str | None, user_agen
             entidade="usuarios",
             entidade_id=usuario.id if usuario else None,
             acao=AcaoAuditoria.LOGIN_FAILED,
-            ip=ip,
-            user_agent=user_agent,
         )
         db.commit()
         raise CredenciaisInvalidasError("E-mail ou senha inválidos")
@@ -46,15 +46,30 @@ def autenticar(db: Session, *, email: str, senha: str, ip: str | None, user_agen
         entidade="usuarios",
         entidade_id=usuario.id,
         acao=AcaoAuditoria.LOGIN,
-        ip=ip,
-        user_agent=user_agent,
     )
     db.commit()
 
-    token = create_access_token(
+    access_token = create_access_token(
         subject=str(usuario.id), papel=usuario.papel.value, transportadora_id=usuario.transportadora_id
     )
-    return usuario, token
+    refresh_token = create_refresh_token(subject=str(usuario.id))
+    return usuario, access_token, refresh_token
+
+
+def renovar_access_token(db: Session, *, refresh_token: str) -> tuple[Usuario, str]:
+    try:
+        payload = decode_refresh_token(refresh_token)
+    except ValueError as exc:
+        raise CredenciaisInvalidasError("Refresh token inválido ou expirado") from exc
+
+    usuario = db.get(Usuario, int(payload["sub"]))
+    if usuario is None or not usuario.ativo:
+        raise CredenciaisInvalidasError("Usuário inválido ou inativo")
+
+    novo_access_token = create_access_token(
+        subject=str(usuario.id), papel=usuario.papel.value, transportadora_id=usuario.transportadora_id
+    )
+    return usuario, novo_access_token
 
 
 def solicitar_redefinicao_senha(db: Session, *, email: str) -> None:

@@ -24,17 +24,38 @@ def create_access_token(*, subject: str, papel: str, transportadora_id: int | No
         "sub": subject,
         "papel": papel,
         "transportadora_id": transportadora_id,
+        "type": "access",
         "iat": now,
         "exp": expires_at,
     }
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
+def create_refresh_token(*, subject: str) -> str:
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(days=settings.refresh_token_expire_days)
+    payload = {"sub": subject, "type": "refresh", "iat": now, "exp": expires_at}
+    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+
+
 def decode_access_token(token: str) -> dict:
     try:
-        return jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+        payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
     except JWTError as exc:
         raise ValueError("Token inválido ou expirado") from exc
+    if payload.get("type") != "access":
+        raise ValueError("Token inválido ou expirado")
+    return payload
+
+
+def decode_refresh_token(token: str) -> dict:
+    try:
+        payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+    except JWTError as exc:
+        raise ValueError("Token inválido ou expirado") from exc
+    if payload.get("type") != "refresh":
+        raise ValueError("Token inválido ou expirado")
+    return payload
 
 
 def generate_reset_token() -> tuple[str, str]:

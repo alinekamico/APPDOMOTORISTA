@@ -14,9 +14,16 @@ class Settings(BaseSettings):
     jwt_secret: str = "changeme"
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 480
+    refresh_token_expire_days: int = 7
 
     password_reset_expire_minutes: int = 30
     app_base_url: str = "http://localhost:3000"
+
+    # Lista separada por vírgula. Same-origin (nginx serve front+back no mesmo domínio em
+    # produção) já protege por padrão, mas mantemos a lista restrita por governança.
+    cors_allowed_origins: str = "http://localhost:3000,http://localhost:3002"
+
+    rate_limit_por_minuto: int = 100
 
     smtp_host: str = "smtp.gmail.com"
     smtp_port: int = 587
@@ -37,6 +44,10 @@ class Settings(BaseSettings):
     uno_replica_database_url: str = ""
 
     upload_dir: str = "./uploads"
+
+    @property
+    def cors_allowed_origins_lista(self) -> list[str]:
+        return [origem.strip() for origem in self.cors_allowed_origins.split(",") if origem.strip()]
 
 
 @lru_cache
