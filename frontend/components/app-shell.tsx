@@ -146,7 +146,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <aside className="hidden w-60 shrink-0 sm:block">{conteudoSidebar}</aside>
 
       {/* Topbar + drawer (mobile) */}
-      <div className="flex flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center gap-3 bg-kami-charcoal px-4 py-3 sm:hidden">
           <button
             onClick={() => setMenuAberto(true)}
@@ -167,7 +167,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        <main className="flex-1 bg-zinc-50 px-4 py-6 sm:px-6">{children}</main>
+        <main className="min-w-0 flex-1 bg-zinc-50 px-4 py-6 sm:px-6">{children}</main>
       </div>
     </div>
   );

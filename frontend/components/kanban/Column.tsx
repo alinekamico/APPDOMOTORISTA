@@ -11,8 +11,8 @@ export function Column({
   romaneios: RomaneioResumo[];
 }) {
   return (
-    <div className="flex w-72 shrink-0 flex-col rounded-xl bg-zinc-100/70 p-3">
-      <div className="mb-3 flex items-center justify-between px-1">
+    <div className="flex max-h-[calc(100vh-180px)] w-72 shrink-0 flex-col rounded-xl bg-zinc-100/70 p-3">
+      <div className="mb-3 flex shrink-0 items-center justify-between px-1">
         <div>
           <h3 className="text-sm font-semibold text-kami-charcoal">{titulo}</h3>
           <p className="text-[11px] text-kami-charcoal-light">Responsável: {responsavel}</p>
@@ -22,7 +22,7 @@ export function Column({
         </span>
       </div>
 
-      <div className="flex flex-col gap-2">
+      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
         {romaneios.map((r) => (
           <Card key={r.id} romaneio={r} />
         ))}
