@@ -15,12 +15,14 @@ de tabelas confirmado:
 Importante: a query NUNCA seleciona campos `vl_*`/`perc_*`/`aliquota_*` (valores monetários e
 fiscais) — isso não deve ser exposto pra transportadora nem motorista. Só dados logísticos.
 
-Ainda em aberto (não bloqueia o uso, mas vale revisar):
-- `situacao` do romaneio não é filtrada — hoje busca sempre os últimos 50 por ID. Para uso
-  contínuo em produção, filtrar por data (dt_saida) ou por um código de situação específico
-  evita reprocessar sempre o mesmo lote de romaneios antigos já importados.
-- CNPJ é comparado só pelos dígitos (romaneio_service._somente_digitos) porque o UNO manda
-  sem pontuação.
+Mapeamento de `situacao` confirmado com a KAMI (romaneios de exemplo conferidos manualmente no UNO):
+  10 = Aberto      (único status que deve ser importado pelo app)
+  20 = Trânsito
+  30 = Finalizado
+  40 = Conferido
+
+CNPJ é comparado só pelos dígitos (romaneio_service._somente_digitos) porque o UNO manda
+sem pontuação.
 """
 
 from sqlalchemy import create_engine, text
@@ -60,8 +62,8 @@ QUERY_ROMANEIOS = """
     JOIN unia.cd_transportadora t ON t.cod_transportadora = r.cod_transportadora
     LEFT JOIN unia.cd_tipo_veiculo tv ON tv.cod_tp_veiculo = r.cod_tp_veiculo
     LEFT JOIN unia.cd_empresa e ON e.cod_empresa = r.cod_empresa
+    WHERE r.situacao = 10
     ORDER BY r.cod_romaneio_entrega DESC
-    LIMIT 50
 """
 
 QUERY_PEDIDOS = """
