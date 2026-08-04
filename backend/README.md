@@ -103,3 +103,4 @@ via connection string do Postgres.
 - [ ] **Pendente da TI**: gerar `JWT_SECRET` e `TMS_WEBHOOK_TOKEN` definitivos antes de produção (os do `.env.example` são só placeholders de desenvolvimento)
 - [ ] **Pendente da TI**: trocar armazenamento de uploads (hoje disco local em `UPLOAD_DIR`) por S3 antes de rodar em múltiplas instâncias EC2
 - [ ] **Pendente da TI**: HTTPS/TLS (configurado na infra, fora do escopo do código)
+- [x] **Nginx**: `client_max_body_size 20M;` no `server{}` do domínio — sem isso, upload de foto/assinatura da entrega (POST multipart) é rejeitado com "Request Entity Too Large" (padrão do nginx é só 1MB). Necessário sempre que o servidor/nginx for reconfigurado do zero.
