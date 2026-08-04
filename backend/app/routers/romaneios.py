@@ -264,6 +264,26 @@ def iniciar_rota(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
+@router.post("/{romaneio_id}/finalizar", response_model=RomaneioOut)
+def finalizar_romaneio(
+    romaneio_id: int,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(require_roles(Papel.MOTORISTA)),
+) -> Romaneio:
+    romaneio = _buscar_romaneio_do_tenant(db, romaneio_id, usuario_atual)
+
+    motorista = db.scalar(select(Motorista).where(Motorista.usuario_id == usuario_atual.id))
+    if motorista is None or romaneio.motorista_id != motorista.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Este romaneio não está alocado a você")
+
+    try:
+        return romaneio_service.finalizar_romaneio(db, romaneio=romaneio, usuario_atual=usuario_atual)
+    except romaneio_service.TransicaoInvalidaError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except romaneio_service.PedidosPendentesError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+
 @router.post("/{romaneio_id}/pedidos", response_model=RomaneioOut)
 def inserir_pedidos(
     romaneio_id: int,

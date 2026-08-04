@@ -43,6 +43,12 @@ const LABEL_ENTREGA: Record<string, string> = {
   cancelado: "Cancelado",
 };
 
+const MENSAGEM_FINALIZADO: Record<string, string> = {
+  concluido: "Romaneio concluído — todos os pedidos foram entregues.",
+  romaneio_incompleto: "Romaneio incompleto — há pedido(s) não entregues. A KAMI vai avaliar as pendências.",
+  romaneio_com_problema: "Romaneio com problema reportado. A KAMI vai avaliar.",
+};
+
 export function RomaneioExecucaoHub({ romaneioId }: { romaneioId: number }) {
   const { carregando: carregandoAuth } = useRequireRole(["motorista"]);
   const { data: romaneio, carregando, erro, recarregar } = useFetch<RomaneioExecucao>(
@@ -86,6 +92,19 @@ export function RomaneioExecucaoHub({ romaneioId }: { romaneioId: number }) {
       recarregar();
     } catch (err) {
       setAcaoErro(err instanceof ApiError ? err.detail : "Não foi possível reordenar a rota.");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  async function handleFinalizarRomaneio() {
+    setAcaoErro(null);
+    setEnviando(true);
+    try {
+      await apiFetch(`/romaneios/${romaneioId}/finalizar`, { method: "POST" });
+      recarregar();
+    } catch (err) {
+      setAcaoErro(err instanceof ApiError ? err.detail : "Não foi possível finalizar o romaneio.");
     } finally {
       setEnviando(false);
     }
@@ -172,9 +191,19 @@ export function RomaneioExecucaoHub({ romaneioId }: { romaneioId: number }) {
         </>
       )}
 
-      {["concluido", "romaneio_incompleto", "romaneio_com_problema"].includes(romaneio.status) && (
+      {romaneio.status === "em_transito" && (
+        <button
+          onClick={handleFinalizarRomaneio}
+          disabled={enviando}
+          className="rounded-xl bg-kami-red px-4 py-3 text-center text-sm font-medium text-white disabled:opacity-60"
+        >
+          {enviando ? "Finalizando..." : "Finalizar romaneio"}
+        </button>
+      )}
+
+      {MENSAGEM_FINALIZADO[romaneio.status] && (
         <p className="rounded-xl bg-zinc-100 px-4 py-3 text-center text-sm text-kami-charcoal-light">
-          Este romaneio já foi finalizado.
+          {MENSAGEM_FINALIZADO[romaneio.status]}
         </p>
       )}
 

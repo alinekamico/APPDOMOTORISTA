@@ -9,7 +9,7 @@ from app.models.evento_entrega import EventoEntrega
 from app.models.pedido import Pedido
 from app.models.tipo_ocorrencia import TipoOcorrencia
 from app.models.usuario import Usuario
-from app.services import auditoria_service, resequenciamento_service, romaneio_service
+from app.services import auditoria_service, resequenciamento_service
 
 
 class OcorrenciaObrigatoriaError(Exception):
@@ -106,8 +106,6 @@ def registrar_entrega(
             # a entrega não deve falhar por causa disso.
             pass
 
-    romaneio_service.verificar_conclusao_automatica(db, romaneio=pedido.romaneio)
-
     get_uno_provider().sync(evento)
     get_nps_notifier().notify_delivery(pedido)
 
@@ -159,8 +157,6 @@ def registrar_nao_entrega(
         acao=AcaoAuditoria.UPDATE,
         dados_depois={"status_entrega": StatusEntregaPedido.NAO_ENTREGUE.value, "tipo_ocorrencia": tipo_ocorrencia.codigo},
     )
-
-    romaneio_service.verificar_conclusao_automatica(db, romaneio=pedido.romaneio)
 
     db.commit()
     db.refresh(pedido)

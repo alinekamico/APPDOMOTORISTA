@@ -36,6 +36,10 @@ class EvidenciaObrigatoriaError(Exception):
     pass
 
 
+class PedidosPendentesError(Exception):
+    pass
+
+
 def _transicionar(
     db: Session,
     *,
@@ -390,16 +394,38 @@ def listar_para_motorista(db: Session, *, motorista_id: int) -> list[Romaneio]:
     )
 
 
-def verificar_conclusao_automatica(db: Session, *, romaneio: Romaneio) -> None:
-    """Regra do sistema: quando 100% dos pedidos estiverem finalizados, o romaneio conclui sozinho."""
-    pedidos = romaneio.pedidos
-    if not pedidos or romaneio.status != StatusRomaneio.EM_TRANSITO:
-        return
+def finalizar_romaneio(db: Session, *, romaneio: Romaneio, usuario_atual: Usuario) -> Romaneio:
+    """Motorista indica que concluiu o romaneio. Exige que todo pedido já tenha uma entrega
+    confirmada ou uma não entrega justificada — nenhum pode ficar pendente/em rota.
 
-    finalizados = {StatusEntregaPedido.ENTREGUE, StatusEntregaPedido.NAO_ENTREGUE, StatusEntregaPedido.CANCELADO}
-    if all(p.status_entrega in finalizados for p in pedidos):
-        romaneio.concluido_em = datetime.now(timezone.utc)
-        _transicionar(db, romaneio=romaneio, novo_status=StatusRomaneio.CONCLUIDO, usuario_atual=None)
+    Se 100% dos pedidos foram entregues, conclui de vez (`concluido`, bloqueado). Se algum
+    ficou como não entregue (cliente ausente, endereço não localizado, recusa, etc.), vai para
+    `romaneio_incompleto` — a KAMI decide o que fazer com as pendências. Problemas do próprio
+    motorista/veículo (pane, acidente, saúde) não passam por aqui: usam
+    `reportar_problema()`, que já pode ser acionado a qualquer momento da execução em campo.
+    """
+    if romaneio.status != StatusRomaneio.EM_TRANSITO:
+        raise TransicaoInvalidaError("Só é possível finalizar um romaneio em trânsito")
+
+    pedidos = romaneio.pedidos
+    nao_finalizados = [
+        p for p in pedidos if p.status_entrega in {StatusEntregaPedido.PENDENTE, StatusEntregaPedido.EM_ROTA}
+    ]
+    if nao_finalizados:
+        raise PedidosPendentesError(
+            f"Ainda há {len(nao_finalizados)} pedido(s) sem confirmação de entrega — "
+            "entregue ou registre a não entrega de cada um antes de finalizar o romaneio"
+        )
+
+    todos_entregues = all(p.status_entrega == StatusEntregaPedido.ENTREGUE for p in pedidos)
+    novo_status = StatusRomaneio.CONCLUIDO if todos_entregues else StatusRomaneio.ROMANEIO_INCOMPLETO
+
+    romaneio.concluido_em = datetime.now(timezone.utc)
+    _transicionar(db, romaneio=romaneio, novo_status=novo_status, usuario_atual=usuario_atual)
+
+    db.commit()
+    db.refresh(romaneio)
+    return romaneio
 
 
 def inserir_pedidos(
