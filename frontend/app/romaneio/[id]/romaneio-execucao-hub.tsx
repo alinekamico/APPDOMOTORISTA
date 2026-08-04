@@ -58,12 +58,23 @@ export function RomaneioExecucaoHub({ romaneioId }: { romaneioId: number }) {
     carregandoAuth ? null : `/romaneios/${romaneioId}`
   );
   const { data: tiposNaoEntrega } = useFetch<TipoOcorrencia[]>("/tipos-ocorrencia?categoria=nao_entrega");
+  const { data: tiposProblema } = useFetch<TipoOcorrencia[]>("/tipos-ocorrencia?categoria=problema_romaneio");
   const [enviando, setEnviando] = useState(false);
   const [acaoErro, setAcaoErro] = useState<string | null>(null);
   const [mostrarFormFinalizar, setMostrarFormFinalizar] = useState(false);
   const [tipoOcorrenciaFinalId, setTipoOcorrenciaFinalId] = useState("");
   const [observacaoFinal, setObservacaoFinal] = useState("");
+  const [respostaContinuarHoje, setRespostaContinuarHoje] = useState<"sim" | "nao" | "">("");
   const { coordenadas, capturar } = useGeolocation();
+
+  const tipoSelecionadoEhProblema = tiposProblema?.some((t) => String(t.id) === tipoOcorrenciaFinalId) ?? false;
+
+  function resetarFormFinalizar() {
+    setMostrarFormFinalizar(false);
+    setTipoOcorrenciaFinalId("");
+    setObservacaoFinal("");
+    setRespostaContinuarHoje("");
+  }
 
   useEffect(() => {
     if (romaneio?.status === "em_transito") capturar();
@@ -125,11 +136,27 @@ export function RomaneioExecucaoHub({ romaneioId }: { romaneioId: number }) {
     setMostrarFormFinalizar(true);
   }
 
+  function handleRespostaContinuarHoje(resposta: "sim" | "nao") {
+    if (resposta === "sim") {
+      // Segue rodando normalmente — o romaneio continua em trânsito, nada é enviado.
+      resetarFormFinalizar();
+      return;
+    }
+    setRespostaContinuarHoje("nao");
+  }
+
   function handleConfirmarFinalizarComPendentes() {
     setAcaoErro(null);
     if (!tipoOcorrenciaFinalId) return setAcaoErro("Selecione o motivo dos pedidos não entregues.");
     const tipo = tiposNaoEntrega?.find((t) => String(t.id) === tipoOcorrenciaFinalId);
     if (tipo?.exige_observacao && !observacaoFinal) return setAcaoErro("Este motivo exige uma descrição.");
+    finalizar({ tipo_ocorrencia_id: Number(tipoOcorrenciaFinalId), observacao: observacaoFinal || undefined });
+  }
+
+  function handleConfirmarProblemaRomaneio() {
+    setAcaoErro(null);
+    const tipo = tiposProblema?.find((t) => String(t.id) === tipoOcorrenciaFinalId);
+    if (tipo?.exige_observacao && !observacaoFinal) return setAcaoErro("Descreva o que aconteceu.");
     finalizar({ tipo_ocorrencia_id: Number(tipoOcorrenciaFinalId), observacao: observacaoFinal || undefined });
   }
 
@@ -228,7 +255,7 @@ export function RomaneioExecucaoHub({ romaneioId }: { romaneioId: number }) {
       {romaneio.status === "em_transito" && mostrarFormFinalizar && (
         <div className="flex flex-col gap-3 rounded-xl border border-kami-red/30 bg-kami-red/5 p-3">
           <p className="text-sm font-medium text-kami-charcoal">
-            {pendentes.length} pedido(s) ainda não confirmado(s) — serão marcados como não entregues:
+            {pendentes.length} pedido(s) ainda não confirmado(s):
           </p>
           <ul className="flex flex-col gap-1 text-xs text-kami-charcoal-light">
             {pendentes.map((p) => (
@@ -242,45 +269,125 @@ export function RomaneioExecucaoHub({ romaneioId }: { romaneioId: number }) {
             Motivo
             <select
               value={tipoOcorrenciaFinalId}
-              onChange={(e) => setTipoOcorrenciaFinalId(e.target.value)}
+              onChange={(e) => {
+                setTipoOcorrenciaFinalId(e.target.value);
+                setRespostaContinuarHoje("");
+                setObservacaoFinal("");
+              }}
               className="rounded-lg border border-black/10 px-3 py-2 outline-none focus:border-kami-red"
             >
               <option value="">Selecione...</option>
-              {tiposNaoEntrega?.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.descricao}
-                </option>
-              ))}
+              <optgroup label="Pedido não entregue">
+                {tiposNaoEntrega?.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.descricao}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="Problema no romaneio">
+                {tiposProblema?.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.descricao}
+                  </option>
+                ))}
+              </optgroup>
             </select>
           </label>
 
-          <label className="flex flex-col gap-1 text-sm">
-            Detalhes
-            <textarea
-              value={observacaoFinal}
-              onChange={(e) => setObservacaoFinal(e.target.value)}
-              rows={3}
-              placeholder="Descreva o que aconteceu com esses pedidos"
-              className="rounded-lg border border-black/10 px-3 py-2 outline-none focus:border-kami-red"
-            />
-          </label>
+          {tipoOcorrenciaFinalId && tipoSelecionadoEhProblema ? (
+            <>
+              <p className="text-sm font-medium text-kami-charcoal">
+                Você vai conseguir continuar as entregas hoje?
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleRespostaContinuarHoje("sim")}
+                  className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium ${
+                    respostaContinuarHoje === "sim"
+                      ? "border-kami-red bg-kami-red/10 text-kami-red"
+                      : "border-black/10 text-kami-charcoal"
+                  }`}
+                >
+                  Sim, vou continuar
+                </button>
+                <button
+                  onClick={() => handleRespostaContinuarHoje("nao")}
+                  className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium ${
+                    respostaContinuarHoje === "nao"
+                      ? "border-kami-red bg-kami-red/10 text-kami-red"
+                      : "border-black/10 text-kami-charcoal"
+                  }`}
+                >
+                  Não, preciso parar
+                </button>
+              </div>
 
-          <div className="flex gap-2">
-            <button
-              onClick={() => setMostrarFormFinalizar(false)}
-              disabled={enviando}
-              className="flex-1 rounded-lg border border-black/10 px-3 py-2 text-sm font-medium text-kami-charcoal"
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={handleConfirmarFinalizarComPendentes}
-              disabled={enviando}
-              className="flex-1 rounded-lg bg-kami-red px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
-            >
-              {enviando ? "Finalizando..." : "Confirmar e finalizar"}
-            </button>
-          </div>
+              {respostaContinuarHoje === "nao" && (
+                <>
+                  <p className="text-xs text-kami-charcoal-light">
+                    O romaneio vai passar pra responsabilidade da transportadora, que vai reagendar as
+                    entregas restantes pro dia seguinte ou pedir que você devolva a mercadoria.
+                  </p>
+                  <label className="flex flex-col gap-1 text-sm">
+                    Detalhes
+                    <textarea
+                      value={observacaoFinal}
+                      onChange={(e) => setObservacaoFinal(e.target.value)}
+                      rows={3}
+                      placeholder="Descreva o que aconteceu"
+                      className="rounded-lg border border-black/10 px-3 py-2 outline-none focus:border-kami-red"
+                    />
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={resetarFormFinalizar}
+                      disabled={enviando}
+                      className="flex-1 rounded-lg border border-black/10 px-3 py-2 text-sm font-medium text-kami-charcoal"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={handleConfirmarProblemaRomaneio}
+                      disabled={enviando}
+                      className="flex-1 rounded-lg bg-kami-red px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+                    >
+                      {enviando ? "Enviando..." : "Confirmar e transferir pra transportadora"}
+                    </button>
+                  </div>
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              <label className="flex flex-col gap-1 text-sm">
+                Detalhes
+                <textarea
+                  value={observacaoFinal}
+                  onChange={(e) => setObservacaoFinal(e.target.value)}
+                  rows={3}
+                  placeholder="Descreva o que aconteceu com esses pedidos"
+                  className="rounded-lg border border-black/10 px-3 py-2 outline-none focus:border-kami-red"
+                />
+              </label>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={resetarFormFinalizar}
+                  disabled={enviando}
+                  className="flex-1 rounded-lg border border-black/10 px-3 py-2 text-sm font-medium text-kami-charcoal"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleConfirmarFinalizarComPendentes}
+                  disabled={enviando}
+                  className="flex-1 rounded-lg bg-kami-red px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+                >
+                  {enviando ? "Finalizando..." : "Confirmar e finalizar"}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
 

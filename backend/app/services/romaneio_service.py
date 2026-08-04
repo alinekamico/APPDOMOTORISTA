@@ -3,7 +3,14 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models.enums import AcaoAuditoria, OrigemRomaneio, StatusEntregaPedido, StatusRomaneio, TipoEventoEntrega
+from app.models.enums import (
+    AcaoAuditoria,
+    CategoriaOcorrencia,
+    OrigemRomaneio,
+    StatusEntregaPedido,
+    StatusRomaneio,
+    TipoEventoEntrega,
+)
 from app.models.evento_entrega import EventoEntrega
 from app.models.foto_carregamento import FotoCarregamento
 from app.models.historico_etapa import HistoricoEtapa
@@ -405,33 +412,50 @@ def finalizar_romaneio(
     tipo_ocorrencia_id: int | None = None,
     observacao: str | None = None,
 ) -> Romaneio:
-    """Motorista indica que concluiu o romaneio.
+    """Motorista indica que concluiu o romaneio (ou que não vai conseguir continuar).
 
-    Se ainda houver pedido pendente/em rota, não bloqueia — pede uma justificativa (motivo +
-    descrição) que se aplica a todos eles de uma vez, marcando-os como não entregues (em vez
-    de o motorista ter que abrir um por um). Se 100% foi entregue, conclui de vez (`concluido`,
-    bloqueado); havendo qualquer não entregue, vai para `romaneio_incompleto` — a KAMI decide o
-    que fazer com as pendências. Problemas do próprio motorista/veículo (pane, acidente, saúde)
-    não passam por aqui: usam `reportar_problema()`, que já pode ser acionado a qualquer
-    momento da execução em campo.
+    Se ainda houver pedido pendente/em rota, não bloqueia — pede um motivo:
+    - Motivo de categoria "não entrega" (cliente ausente, endereço não localizado etc.):
+      aplica a todos os pendentes de uma vez, marcando-os como não entregues. Se 100% acabar
+      entregue, conclui de vez (`concluido`, bloqueado); havendo não entregue, vai para
+      `romaneio_incompleto` — a KAMI decide o que fazer com as pendências.
+    - Motivo de categoria "problema do romaneio" (pane, acidente, saúde, furto/roubo): não
+      mexe nos pedidos — vai direto pra `romaneio_com_problema`, tirando a responsabilidade do
+      motorista (a transportadora/KAMI assume dali pra frente, decidindo se reagenda a entrega
+      pro dia seguinte ou se o motorista deve devolver a mercadoria). O frontend já pergunta
+      antes "vai conseguir continuar hoje?" — só chama esse motivo se a resposta for não.
     """
     if romaneio.status != StatusRomaneio.EM_TRANSITO:
         raise TransicaoInvalidaError("Só é possível finalizar um romaneio em trânsito")
 
-    pedidos = romaneio.pedidos
-    pendentes = [p for p in pedidos if p.status_entrega in {StatusEntregaPedido.PENDENTE, StatusEntregaPedido.EM_ROTA}]
-
-    if pendentes:
-        if tipo_ocorrencia_id is None:
-            raise PedidosPendentesError(
-                f"Ainda há {len(pendentes)} pedido(s) sem confirmação de entrega — "
-                "informe o motivo pra finalizar o romaneio marcando-os como não entregues"
-            )
+    tipo_ocorrencia: TipoOcorrencia | None = None
+    if tipo_ocorrencia_id is not None:
         tipo_ocorrencia = db.get(TipoOcorrencia, tipo_ocorrencia_id)
         if tipo_ocorrencia is None:
             raise RecursoInvalidoError("Tipo de ocorrência inválido")
         if tipo_ocorrencia.exige_observacao and not observacao:
             raise PedidosPendentesError("Este motivo exige uma descrição")
+
+    if tipo_ocorrencia is not None and tipo_ocorrencia.categoria == CategoriaOcorrencia.PROBLEMA_ROMANEIO:
+        romaneio.tipo_ocorrencia_id = tipo_ocorrencia.id
+        romaneio.observacao_ocorrencia = observacao
+        _transicionar(
+            db, romaneio=romaneio, novo_status=StatusRomaneio.ROMANEIO_COM_PROBLEMA,
+            usuario_atual=usuario_atual, observacao=observacao,
+        )
+        db.commit()
+        db.refresh(romaneio)
+        return romaneio
+
+    pedidos = romaneio.pedidos
+    pendentes = [p for p in pedidos if p.status_entrega in {StatusEntregaPedido.PENDENTE, StatusEntregaPedido.EM_ROTA}]
+
+    if pendentes:
+        if tipo_ocorrencia is None:
+            raise PedidosPendentesError(
+                f"Ainda há {len(pendentes)} pedido(s) sem confirmação de entrega — "
+                "informe o motivo pra finalizar o romaneio marcando-os como não entregues"
+            )
 
         agora = datetime.now(timezone.utc)
         for pedido in pendentes:
