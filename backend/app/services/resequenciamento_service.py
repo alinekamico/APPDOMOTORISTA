@@ -135,7 +135,18 @@ def resequenciar_pendentes(
 
     tempo_total_min = sum(matriz[a][b] for a, b in zip([0, *ordem], ordem))
 
-    proxima_sequencia = max((p.sequencia_atual for p in romaneio.pedidos if p not in pendentes), default=0) + 1
+    # Renumera TODO o romaneio (não só os pendentes) pra manter sempre uma sequência 1..N
+    # contígua, sem lacunas nem números além do total de pedidos. Entregas fora de ordem (ex:
+    # entregou o 1 e o 4, pulando 2 e 3) deixavam "buracos" que inflavam a sequência dos
+    # pendentes pra além de N (ex: virava 5..13 num romaneio de 11 pedidos) — confuso na tela
+    # e no mapa. Pedidos já finalizados mantêm a ordem relativa entre si, só compactada.
+    finalizados_ordenados = sorted(
+        (p for p in romaneio.pedidos if p not in pendentes), key=lambda p: p.sequencia_atual
+    )
+    for posicao, pedido in enumerate(finalizados_ordenados, start=1):
+        pedido.sequencia_atual = posicao
+
+    proxima_sequencia = len(finalizados_ordenados) + 1
     for posicao, indice_pendente in enumerate(ordem):
         pedido = pendentes[indice_pendente - 1]
         pedido.sequencia_atual = proxima_sequencia + posicao
