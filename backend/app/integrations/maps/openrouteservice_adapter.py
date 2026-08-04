@@ -3,6 +3,9 @@ import httpx
 from app.core.config import get_settings
 from app.integrations.maps.interface import Ponto
 
+# A OpenRouteService anunciou migração de api.openrouteservice.org para api.heigit.org, mas o
+# path novo ainda não é um simples troca de domínio (retornou 404 no teste). Manter a URL
+# atual, que segue funcionando, até a documentação da migração ficar clara.
 MATRIX_URL = "https://api.openrouteservice.org/v2/matrix/driving-car"
 
 
