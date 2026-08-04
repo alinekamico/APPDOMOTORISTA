@@ -7,6 +7,7 @@ import { useFetch } from "@/lib/use-fetch";
 import { apiFetch, ApiError } from "@/lib/api-client";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import { linkGoogleMaps, linkWaze } from "@/lib/navegacao";
+import { calcularDistanciaKm, formatarDistancia } from "@/lib/distancia";
 import { useEffect, useState } from "react";
 
 // Leaflet usa `window` na inicialização — precisa ficar fora do SSR.
@@ -301,6 +302,10 @@ export function RomaneioExecucaoHub({ romaneioId }: { romaneioId: number }) {
       <div className="flex flex-col gap-2">
         {pedidosOrdenados.map((pedido) => {
           const finalizado = pedido.status_entrega === "entregue" || pedido.status_entrega === "nao_entregue";
+          const distanciaKm =
+            coordenadas && pedido.cliente_lat !== null && pedido.cliente_lng !== null
+              ? calcularDistanciaKm(coordenadas, { lat: pedido.cliente_lat, lng: pedido.cliente_lng })
+              : null;
           const conteudo = (
             <div className="flex items-center gap-3 rounded-xl border border-black/10 bg-white p-3">
               <span
@@ -314,11 +319,13 @@ export function RomaneioExecucaoHub({ romaneioId }: { romaneioId: number }) {
                 <div>
                   <p className="text-sm font-medium text-kami-charcoal">{pedido.cliente_nome}</p>
                   <p className="text-xs text-kami-charcoal-light">{pedido.cliente_endereco}</p>
-                  {(pedido.peso_kg || pedido.qtd_volumes) && (
+                  {(pedido.peso_kg || pedido.qtd_volumes || distanciaKm !== null) && (
                     <p className="text-xs text-kami-charcoal-light">
                       {pedido.peso_kg ? `${pedido.peso_kg} kg` : null}
                       {pedido.peso_kg && pedido.qtd_volumes ? " · " : null}
                       {pedido.qtd_volumes ? `${pedido.qtd_volumes} ${pedido.especie_volume ?? "volume(s)"}` : null}
+                      {(pedido.peso_kg || pedido.qtd_volumes) && distanciaKm !== null ? " · " : null}
+                      {distanciaKm !== null ? `${formatarDistancia(distanciaKm)} daqui` : null}
                     </p>
                   )}
                 </div>
