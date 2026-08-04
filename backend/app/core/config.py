@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_from_name: str = "KAMI CO. Romaneios"
 
-    google_maps_api_key: str = ""
+    openrouteservice_api_key: str = ""
 
     tms_webhook_token: str = "changeme"
     integration_adapter_maps: str = "fake"

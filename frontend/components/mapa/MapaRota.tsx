@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect } from "react";
-import { APIProvider, AdvancedMarker, Map, Pin, Polyline, useMap } from "@vis.gl/react-google-maps";
+import { MapContainer, Marker, Polyline, TileLayer, useMap } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 
 export type PontoRota = {
   id: number;
@@ -12,22 +14,28 @@ export type PontoRota = {
   entregue: boolean;
 };
 
-const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+function criarIcone(texto: string, cor: string) {
+  return L.divIcon({
+    className: "",
+    html: `<div style="background:${cor};color:#fff;border-radius:9999px;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.4)">${texto}</div>`,
+    iconSize: [26, 26],
+    iconAnchor: [13, 13],
+  });
+}
 
 function AjustarLimites({ pontos }: { pontos: { lat: number; lng: number }[] }) {
   const map = useMap();
 
   useEffect(() => {
-    if (!map || pontos.length === 0) return;
+    if (pontos.length === 0) return;
     if (pontos.length === 1) {
-      map.setCenter(pontos[0]);
-      map.setZoom(15);
+      map.setView([pontos[0].lat, pontos[0].lng], 15);
       return;
     }
-    const bounds = new google.maps.LatLngBounds();
-    pontos.forEach((p) => bounds.extend(p));
-    map.fitBounds(bounds, 48);
-  }, [map, pontos]);
+    const bounds = L.latLngBounds(pontos.map((p) => [p.lat, p.lng] as [number, number]));
+    map.fitBounds(bounds, { padding: [24, 24] });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, JSON.stringify(pontos)]);
 
   return null;
 }
@@ -43,14 +51,6 @@ export function MapaRota({
     (p) => typeof p.lat === "number" && typeof p.lng === "number"
   );
 
-  if (!API_KEY) {
-    return (
-      <div className="flex h-56 items-center justify-center rounded-xl border border-dashed border-black/15 bg-zinc-50 text-center text-xs text-kami-charcoal-light">
-        Mapa embutido desativado — configure NEXT_PUBLIC_GOOGLE_MAPS_API_KEY para exibi-lo.
-      </div>
-    );
-  }
-
   if (pontosComCoordenada.length === 0) {
     return (
       <div className="flex h-56 items-center justify-center rounded-xl border border-dashed border-black/15 bg-zinc-50 text-center text-xs text-kami-charcoal-light">
@@ -63,47 +63,47 @@ export function MapaRota({
   const caminho = pontosComCoordenada
     .slice()
     .sort((a, b) => a.sequencia_atual - b.sequencia_atual)
-    .map((p) => ({ lat: p.lat, lng: p.lng }));
+    .map((p): [number, number] => [p.lat, p.lng]);
 
   return (
-    <APIProvider apiKey={API_KEY}>
-      <div className="h-56 w-full overflow-hidden rounded-xl border border-black/10">
-        <Map
-          mapId="kami-romaneio-map"
-          defaultCenter={pontosComCoordenada[0]}
-          defaultZoom={13}
-          gestureHandling="greedy"
-          disableDefaultUI
-        >
-          <AjustarLimites pontos={todosOsPontos} />
+    <div className="h-56 w-full overflow-hidden rounded-xl border border-black/10">
+      <MapContainer
+        center={[pontosComCoordenada[0].lat, pontosComCoordenada[0].lng]}
+        zoom={13}
+        scrollWheelZoom
+        style={{ height: "100%", width: "100%" }}
+      >
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
 
-          {posicaoAtual && (
-            <AdvancedMarker position={posicaoAtual} title="Sua posição atual">
-              <Pin background="#463D3F" borderColor="#463D3F" glyphColor="#FFFFFF" />
-            </AdvancedMarker>
-          )}
+        <AjustarLimites pontos={todosOsPontos} />
 
-          {pontosComCoordenada.map((p) => (
-            <AdvancedMarker key={p.id} position={{ lat: p.lat, lng: p.lng }} title={p.cliente_nome}>
-              <Pin
-                background={p.entregue ? "#16a34a" : "#E2032A"}
-                borderColor={p.entregue ? "#15803d" : "#b8021f"}
-                glyphColor="#FFFFFF"
-                glyph={String(p.sequencia_atual)}
-              />
-            </AdvancedMarker>
-          ))}
+        {posicaoAtual && (
+          <Marker
+            position={[posicaoAtual.lat, posicaoAtual.lng]}
+            icon={criarIcone("●", "#463D3F")}
+          />
+        )}
 
-          {posicaoAtual && caminho.length > 0 && (
-            <Polyline
-              path={[posicaoAtual, ...caminho]}
-              strokeColor="#E2032A"
-              strokeOpacity={0.7}
-              strokeWeight={3}
-            />
-          )}
-        </Map>
-      </div>
-    </APIProvider>
+        {pontosComCoordenada.map((p) => (
+          <Marker
+            key={p.id}
+            position={[p.lat, p.lng]}
+            icon={criarIcone(String(p.sequencia_atual), p.entregue ? "#16a34a" : "#E2032A")}
+          />
+        ))}
+
+        {posicaoAtual && caminho.length > 0 && (
+          <Polyline
+            positions={[[posicaoAtual.lat, posicaoAtual.lng], ...caminho]}
+            color="#E2032A"
+            opacity={0.7}
+            weight={3}
+          />
+        )}
+      </MapContainer>
+    </div>
   );
 }

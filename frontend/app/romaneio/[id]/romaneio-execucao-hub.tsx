@@ -1,13 +1,19 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useRequireRole } from "@/lib/roles";
 import { useFetch } from "@/lib/use-fetch";
 import { apiFetch, ApiError } from "@/lib/api-client";
 import { useGeolocation } from "@/hooks/useGeolocation";
-import { MapaRota } from "@/components/mapa/MapaRota";
 import { linkGoogleMaps, linkWaze } from "@/lib/navegacao";
 import { useEffect, useState } from "react";
+
+// Leaflet usa `window` na inicialização — precisa ficar fora do SSR.
+const MapaRota = dynamic(() => import("@/components/mapa/MapaRota").then((m) => m.MapaRota), {
+  ssr: false,
+  loading: () => <div className="h-56 w-full animate-pulse rounded-xl bg-zinc-100" />,
+});
 
 type Pedido = {
   id: number;
