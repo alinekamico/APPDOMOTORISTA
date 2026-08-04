@@ -43,6 +43,7 @@ def registrar_entrega(
     geolocalizacao_lat: float | None = Form(default=None),
     geolocalizacao_lng: float | None = Form(default=None),
     tipo_ocorrencia_desvio_id: int | None = Form(default=None),
+    mercadoria_conferida_na_entrega: bool = Form(...),
     db: Session = Depends(get_db),
     usuario_atual: Usuario = Depends(require_roles(Papel.MOTORISTA)),
 ) -> Pedido:
@@ -63,6 +64,7 @@ def registrar_entrega(
             geolocalizacao_lng=geolocalizacao_lng,
             cliente_whatsapp=cliente_whatsapp,
             cliente_email=cliente_email,
+            mercadoria_conferida_na_entrega=mercadoria_conferida_na_entrega,
             usuario_atual=usuario_atual,
             tipo_ocorrencia_desvio_id=tipo_ocorrencia_desvio_id,
         )

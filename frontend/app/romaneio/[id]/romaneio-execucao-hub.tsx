@@ -6,6 +6,7 @@ import { useFetch } from "@/lib/use-fetch";
 import { apiFetch, ApiError } from "@/lib/api-client";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import { MapaRota } from "@/components/mapa/MapaRota";
+import { linkGoogleMaps, linkWaze } from "@/lib/navegacao";
 import { useEffect, useState } from "react";
 
 type Pedido = {
@@ -27,20 +28,6 @@ type RomaneioExecucao = {
   status: string;
   pedidos: Pedido[];
 };
-
-function linkGoogleMaps(pedido: Pedido) {
-  const destino = pedido.cliente_lat && pedido.cliente_lng
-    ? `${pedido.cliente_lat},${pedido.cliente_lng}`
-    : encodeURIComponent(pedido.cliente_endereco);
-  return `https://www.google.com/maps/dir/?api=1&destination=${destino}&travelmode=driving`;
-}
-
-function linkWaze(pedido: Pedido) {
-  if (pedido.cliente_lat && pedido.cliente_lng) {
-    return `https://waze.com/ul?ll=${pedido.cliente_lat},${pedido.cliente_lng}&navigate=yes`;
-  }
-  return `https://waze.com/ul?q=${encodeURIComponent(pedido.cliente_endereco)}&navigate=yes`;
-}
 
 const LABEL_ENTREGA: Record<string, string> = {
   pendente: "Pendente",
@@ -72,27 +59,6 @@ export function RomaneioExecucaoHub({ romaneioId }: { romaneioId: number }) {
       recarregar();
     } catch (err) {
       setAcaoErro(err instanceof ApiError ? err.detail : "Não foi possível iniciar a rota.");
-    } finally {
-      setEnviando(false);
-    }
-  }
-
-  async function handleReordenarRota() {
-    setAcaoErro(null);
-    setEnviando(true);
-    try {
-      const posicao = await capturar();
-      if (!posicao) {
-        setAcaoErro("Não foi possível obter sua localização atual.");
-        return;
-      }
-      await apiFetch(`/romaneios/${romaneioId}/resequenciar`, {
-        method: "POST",
-        body: { posicao_lat: posicao.lat, posicao_lng: posicao.lng },
-      });
-      recarregar();
-    } catch (err) {
-      setAcaoErro(err instanceof ApiError ? err.detail : "Não foi possível reordenar a rota.");
     } finally {
       setEnviando(false);
     }
@@ -150,33 +116,24 @@ export function RomaneioExecucaoHub({ romaneioId }: { romaneioId: number }) {
       )}
 
       {romaneio.status === "em_transito" && proximoPendente && (
-        <>
-          <div className="flex gap-2">
-            <a
-              href={linkGoogleMaps(proximoPendente)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex-1 rounded-lg border border-black/10 bg-white px-3 py-2 text-center text-sm font-medium text-kami-charcoal"
-            >
-              Abrir no Google Maps
-            </a>
-            <a
-              href={linkWaze(proximoPendente)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex-1 rounded-lg border border-black/10 bg-white px-3 py-2 text-center text-sm font-medium text-kami-charcoal"
-            >
-              Abrir no Waze
-            </a>
-          </div>
-          <button
-            onClick={handleReordenarRota}
-            disabled={enviando}
-            className="rounded-lg border border-dashed border-kami-red/40 px-3 py-2 text-center text-sm font-medium text-kami-red disabled:opacity-60"
+        <div className="flex gap-2">
+          <a
+            href={linkGoogleMaps(proximoPendente)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 rounded-lg border border-black/10 bg-white px-3 py-2 text-center text-sm font-medium text-kami-charcoal"
           >
-            {enviando ? "Recalculando..." : "Reordenar rota a partir da minha posição"}
-          </button>
-        </>
+            Abrir no Google Maps
+          </a>
+          <a
+            href={linkWaze(proximoPendente)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 rounded-lg border border-black/10 bg-white px-3 py-2 text-center text-sm font-medium text-kami-charcoal"
+          >
+            Abrir no Waze
+          </a>
+        </div>
       )}
 
       {["concluido", "romaneio_incompleto", "romaneio_com_problema"].includes(romaneio.status) && (

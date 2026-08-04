@@ -44,6 +44,7 @@ def registrar_entrega(
     geolocalizacao_lng: float | None,
     cliente_whatsapp: str | None,
     cliente_email: str | None,
+    mercadoria_conferida_na_entrega: bool,
     usuario_atual: Usuario,
     tipo_ocorrencia_desvio_id: int | None = None,
 ) -> Pedido:
@@ -65,6 +66,7 @@ def registrar_entrega(
         nome_recebedor=nome_recebedor,
         geolocalizacao_lat=geolocalizacao_lat,
         geolocalizacao_lng=geolocalizacao_lng,
+        mercadoria_conferida_na_entrega=mercadoria_conferida_na_entrega,
     )
     db.add(evento)
 

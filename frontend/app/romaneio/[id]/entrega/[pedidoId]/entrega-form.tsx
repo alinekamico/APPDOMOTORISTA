@@ -8,11 +8,14 @@ import { apiFetch, ApiError } from "@/lib/api-client";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import { CameraCapture } from "@/components/entrega/CameraCapture";
 import { AssinaturaCanvas, type AssinaturaCanvasHandle } from "@/components/entrega/AssinaturaCanvas";
+import { linkGoogleMaps, linkWaze } from "@/lib/navegacao";
 
 type Pedido = {
   id: number;
   cliente_nome: string;
   cliente_endereco: string;
+  cliente_lat: number | null;
+  cliente_lng: number | null;
   cliente_whatsapp: string | null;
   cliente_email: string | null;
 };
@@ -40,6 +43,7 @@ export function EntregaForm({ romaneioId, pedidoId }: { romaneioId: number; pedi
   const [email, setEmail] = useState("");
   const [precisaJustificarDesvio, setPrecisaJustificarDesvio] = useState(false);
   const [tipoDesvioId, setTipoDesvioId] = useState("");
+  const [mercadoriaConferida, setMercadoriaConferida] = useState<"sim" | "nao" | "">("");
 
   const [tipoOcorrenciaId, setTipoOcorrenciaId] = useState("");
   const [observacao, setObservacao] = useState("");
@@ -65,6 +69,7 @@ export function EntregaForm({ romaneioId, pedidoId }: { romaneioId: number; pedi
     if (!foto) return setErro("Tire uma foto da entrega.");
     if (!assinaturaRef.current?.temAssinatura()) return setErro("Colete a assinatura do cliente.");
     if (!nomeRecebedor) return setErro("Informe o nome de quem recebeu.");
+    if (!mercadoriaConferida) return setErro("Informe se o cliente conferiu a mercadoria.");
     if (precisaJustificarDesvio && !tipoDesvioId) return setErro("Selecione o motivo do desvio de sequência.");
 
     setEnviando(true);
@@ -76,6 +81,7 @@ export function EntregaForm({ romaneioId, pedidoId }: { romaneioId: number; pedi
       formData.append("foto", foto);
       formData.append("assinatura", assinatura);
       formData.append("nome_recebedor", nomeRecebedor);
+      formData.append("mercadoria_conferida_na_entrega", String(mercadoriaConferida === "sim"));
       if (whatsapp) formData.append("cliente_whatsapp", whatsapp);
       if (email) formData.append("cliente_email", email);
       if (coordenadas) {
@@ -131,6 +137,25 @@ export function EntregaForm({ romaneioId, pedidoId }: { romaneioId: number; pedi
         <p className="text-sm text-kami-charcoal-light">{pedido.cliente_endereco}</p>
       </div>
 
+      <div className="flex gap-2">
+        <a
+          href={linkGoogleMaps(pedido)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex-1 rounded-lg border border-black/10 bg-white px-3 py-2 text-center text-sm font-medium text-kami-charcoal"
+        >
+          Abrir no Google Maps
+        </a>
+        <a
+          href={linkWaze(pedido)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex-1 rounded-lg border border-black/10 bg-white px-3 py-2 text-center text-sm font-medium text-kami-charcoal"
+        >
+          Abrir no Waze
+        </a>
+      </div>
+
       <div className="flex rounded-lg bg-zinc-100 p-1 text-sm">
         <button
           onClick={() => setModo("entrega")}
@@ -181,6 +206,35 @@ export function EntregaForm({ romaneioId, pedidoId }: { romaneioId: number; pedi
               className="rounded-lg border border-black/10 px-3 py-2 outline-none focus:border-kami-red"
             />
           </label>
+
+          <div className="flex flex-col gap-1 text-sm">
+            O cliente conferiu a mercadoria na hora da entrega?
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setMercadoriaConferida("sim")}
+                className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium ${
+                  mercadoriaConferida === "sim"
+                    ? "border-kami-red bg-kami-red/10 text-kami-red"
+                    : "border-black/10 text-kami-charcoal"
+                }`}
+              >
+                Sim, conferiu na hora
+              </button>
+              <button
+                type="button"
+                onClick={() => setMercadoriaConferida("nao")}
+                className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium ${
+                  mercadoriaConferida === "nao"
+                    ? "border-kami-red bg-kami-red/10 text-kami-red"
+                    : "border-black/10 text-kami-charcoal"
+                }`}
+              >
+                Não, vai conferir depois
+              </button>
+            </div>
+          </div>
+
           <label className="flex flex-col gap-1 text-sm">
             WhatsApp do cliente
             <input

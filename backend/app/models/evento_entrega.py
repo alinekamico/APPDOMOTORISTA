@@ -23,6 +23,8 @@ class EventoEntrega(Base):
     assinatura_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     foto_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     nome_recebedor: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Só se aplica a eventos ENTREGUE: cliente conferiu a mercadoria na hora ou vai conferir depois?
+    mercadoria_conferida_na_entrega: Mapped[bool | None] = mapped_column(nullable=True)
 
     geolocalizacao_lat: Mapped[float | None] = mapped_column(Numeric(10, 7), nullable=True)
     geolocalizacao_lng: Mapped[float | None] = mapped_column(Numeric(10, 7), nullable=True)
