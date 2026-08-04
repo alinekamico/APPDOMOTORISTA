@@ -14,6 +14,7 @@ from app.schemas.romaneio import (
     AlterarTransportadoraRequest,
     DefinirTransportadoraRequest,
     DevolverParaTransporteRequest,
+    FinalizarRomaneioRequest,
     InserirPedidosRequest,
     ReportarProblemaRequest,
     ResequenciarRequest,
@@ -267,6 +268,7 @@ def iniciar_rota(
 @router.post("/{romaneio_id}/finalizar", response_model=RomaneioOut)
 def finalizar_romaneio(
     romaneio_id: int,
+    payload: FinalizarRomaneioRequest,
     db: Session = Depends(get_db),
     usuario_atual: Usuario = Depends(require_roles(Papel.MOTORISTA)),
 ) -> Romaneio:
@@ -277,11 +279,20 @@ def finalizar_romaneio(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Este romaneio não está alocado a você")
 
     try:
-        return romaneio_service.finalizar_romaneio(db, romaneio=romaneio, usuario_atual=usuario_atual)
+        return romaneio_service.finalizar_romaneio(
+            db,
+            romaneio=romaneio,
+            motorista_id=motorista.id,
+            usuario_atual=usuario_atual,
+            tipo_ocorrencia_id=payload.tipo_ocorrencia_id,
+            observacao=payload.observacao,
+        )
     except romaneio_service.TransicaoInvalidaError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except romaneio_service.PedidosPendentesError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    except romaneio_service.RecursoInvalidoError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
 
 
 @router.post("/{romaneio_id}/pedidos", response_model=RomaneioOut)

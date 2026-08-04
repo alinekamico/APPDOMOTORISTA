@@ -30,6 +30,7 @@ class EventoEntrega(Base):
     geolocalizacao_lng: Mapped[float | None] = mapped_column(Numeric(10, 7), nullable=True)
 
     tipo_ocorrencia_id: Mapped[int | None] = mapped_column(ForeignKey("tipos_ocorrencia.id"), nullable=True)
+    observacao: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     uno_sync_status: Mapped[UnoSyncStatus] = mapped_column(
         Enum(UnoSyncStatus, native_enum=False, length=32),

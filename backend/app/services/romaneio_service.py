@@ -3,12 +3,14 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models.enums import AcaoAuditoria, OrigemRomaneio, StatusEntregaPedido, StatusRomaneio
+from app.models.enums import AcaoAuditoria, OrigemRomaneio, StatusEntregaPedido, StatusRomaneio, TipoEventoEntrega
+from app.models.evento_entrega import EventoEntrega
 from app.models.foto_carregamento import FotoCarregamento
 from app.models.historico_etapa import HistoricoEtapa
 from app.models.motorista import Motorista
 from app.models.pedido import Pedido
 from app.models.romaneio import Romaneio
+from app.models.tipo_ocorrencia import TipoOcorrencia
 from app.models.transportadora import Transportadora
 from app.models.usuario import Usuario
 from app.models.veiculo import Veiculo
@@ -394,28 +396,57 @@ def listar_para_motorista(db: Session, *, motorista_id: int) -> list[Romaneio]:
     )
 
 
-def finalizar_romaneio(db: Session, *, romaneio: Romaneio, usuario_atual: Usuario) -> Romaneio:
-    """Motorista indica que concluiu o romaneio. Exige que todo pedido já tenha uma entrega
-    confirmada ou uma não entrega justificada — nenhum pode ficar pendente/em rota.
+def finalizar_romaneio(
+    db: Session,
+    *,
+    romaneio: Romaneio,
+    motorista_id: int,
+    usuario_atual: Usuario,
+    tipo_ocorrencia_id: int | None = None,
+    observacao: str | None = None,
+) -> Romaneio:
+    """Motorista indica que concluiu o romaneio.
 
-    Se 100% dos pedidos foram entregues, conclui de vez (`concluido`, bloqueado). Se algum
-    ficou como não entregue (cliente ausente, endereço não localizado, recusa, etc.), vai para
-    `romaneio_incompleto` — a KAMI decide o que fazer com as pendências. Problemas do próprio
-    motorista/veículo (pane, acidente, saúde) não passam por aqui: usam
-    `reportar_problema()`, que já pode ser acionado a qualquer momento da execução em campo.
+    Se ainda houver pedido pendente/em rota, não bloqueia — pede uma justificativa (motivo +
+    descrição) que se aplica a todos eles de uma vez, marcando-os como não entregues (em vez
+    de o motorista ter que abrir um por um). Se 100% foi entregue, conclui de vez (`concluido`,
+    bloqueado); havendo qualquer não entregue, vai para `romaneio_incompleto` — a KAMI decide o
+    que fazer com as pendências. Problemas do próprio motorista/veículo (pane, acidente, saúde)
+    não passam por aqui: usam `reportar_problema()`, que já pode ser acionado a qualquer
+    momento da execução em campo.
     """
     if romaneio.status != StatusRomaneio.EM_TRANSITO:
         raise TransicaoInvalidaError("Só é possível finalizar um romaneio em trânsito")
 
     pedidos = romaneio.pedidos
-    nao_finalizados = [
-        p for p in pedidos if p.status_entrega in {StatusEntregaPedido.PENDENTE, StatusEntregaPedido.EM_ROTA}
-    ]
-    if nao_finalizados:
-        raise PedidosPendentesError(
-            f"Ainda há {len(nao_finalizados)} pedido(s) sem confirmação de entrega — "
-            "entregue ou registre a não entrega de cada um antes de finalizar o romaneio"
-        )
+    pendentes = [p for p in pedidos if p.status_entrega in {StatusEntregaPedido.PENDENTE, StatusEntregaPedido.EM_ROTA}]
+
+    if pendentes:
+        if tipo_ocorrencia_id is None:
+            raise PedidosPendentesError(
+                f"Ainda há {len(pendentes)} pedido(s) sem confirmação de entrega — "
+                "informe o motivo pra finalizar o romaneio marcando-os como não entregues"
+            )
+        tipo_ocorrencia = db.get(TipoOcorrencia, tipo_ocorrencia_id)
+        if tipo_ocorrencia is None:
+            raise RecursoInvalidoError("Tipo de ocorrência inválido")
+        if tipo_ocorrencia.exige_observacao and not observacao:
+            raise PedidosPendentesError("Este motivo exige uma descrição")
+
+        agora = datetime.now(timezone.utc)
+        for pedido in pendentes:
+            pedido.status_entrega = StatusEntregaPedido.NAO_ENTREGUE
+            pedido.tipo_ocorrencia_id = tipo_ocorrencia.id
+            pedido.entregue_em = agora
+            db.add(
+                EventoEntrega(
+                    pedido_id=pedido.id,
+                    motorista_id=motorista_id,
+                    tipo=TipoEventoEntrega.NAO_ENTREGUE,
+                    tipo_ocorrencia_id=tipo_ocorrencia.id,
+                    observacao=observacao,
+                )
+            )
 
     todos_entregues = all(p.status_entrega == StatusEntregaPedido.ENTREGUE for p in pedidos)
     novo_status = StatusRomaneio.CONCLUIDO if todos_entregues else StatusRomaneio.ROMANEIO_INCOMPLETO

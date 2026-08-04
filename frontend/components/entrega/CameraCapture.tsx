@@ -23,8 +23,10 @@ export function CameraCapture({
     <div className="flex flex-col gap-2">
       <span className="text-sm font-medium text-kami-charcoal">{label}</span>
       {preview ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={preview} alt={label} className="h-40 w-full rounded-lg object-cover" />
+        <div className="flex max-h-80 w-full items-center justify-center overflow-hidden rounded-lg border border-black/10 bg-zinc-100">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={preview} alt={label} className="max-h-80 w-full object-contain" />
+        </div>
       ) : (
         <button
           type="button"

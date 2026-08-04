@@ -142,6 +142,7 @@ def registrar_nao_entrega(
         geolocalizacao_lat=geolocalizacao_lat,
         geolocalizacao_lng=geolocalizacao_lng,
         tipo_ocorrencia_id=tipo_ocorrencia.id,
+        observacao=observacao,
     )
     db.add(evento)
 

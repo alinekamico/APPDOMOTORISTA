@@ -161,3 +161,11 @@ class ReportarProblemaRequest(BaseModel):
     status: StatusRomaneio
     tipo_ocorrencia_id: int
     observacao: str
+
+
+class FinalizarRomaneioRequest(BaseModel):
+    """tipo_ocorrencia_id/observacao só são obrigatórios se ainda houver pedido pendente —
+    aplicados a todos os pendentes de uma vez, marcando-os como não entregues."""
+
+    tipo_ocorrencia_id: int | None = None
+    observacao: str | None = None

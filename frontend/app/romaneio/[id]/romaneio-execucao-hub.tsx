@@ -35,6 +35,8 @@ type RomaneioExecucao = {
   pedidos: Pedido[];
 };
 
+type TipoOcorrencia = { id: number; descricao: string; exige_observacao: boolean };
+
 const LABEL_ENTREGA: Record<string, string> = {
   pendente: "Pendente",
   em_rota: "Em rota",
@@ -54,8 +56,12 @@ export function RomaneioExecucaoHub({ romaneioId }: { romaneioId: number }) {
   const { data: romaneio, carregando, erro, recarregar } = useFetch<RomaneioExecucao>(
     carregandoAuth ? null : `/romaneios/${romaneioId}`
   );
+  const { data: tiposNaoEntrega } = useFetch<TipoOcorrencia[]>("/tipos-ocorrencia?categoria=nao_entrega");
   const [enviando, setEnviando] = useState(false);
   const [acaoErro, setAcaoErro] = useState<string | null>(null);
+  const [mostrarFormFinalizar, setMostrarFormFinalizar] = useState(false);
+  const [tipoOcorrenciaFinalId, setTipoOcorrenciaFinalId] = useState("");
+  const [observacaoFinal, setObservacaoFinal] = useState("");
   const { coordenadas, capturar } = useGeolocation();
 
   useEffect(() => {
@@ -97,11 +103,11 @@ export function RomaneioExecucaoHub({ romaneioId }: { romaneioId: number }) {
     }
   }
 
-  async function handleFinalizarRomaneio() {
+  async function finalizar(body: { tipo_ocorrencia_id?: number; observacao?: string }) {
     setAcaoErro(null);
     setEnviando(true);
     try {
-      await apiFetch(`/romaneios/${romaneioId}/finalizar`, { method: "POST" });
+      await apiFetch(`/romaneios/${romaneioId}/finalizar`, { method: "POST", body });
       recarregar();
     } catch (err) {
       setAcaoErro(err instanceof ApiError ? err.detail : "Não foi possível finalizar o romaneio.");
@@ -110,12 +116,29 @@ export function RomaneioExecucaoHub({ romaneioId }: { romaneioId: number }) {
     }
   }
 
+  function handleCliqueFinalizar(pendentes: Pedido[]) {
+    if (pendentes.length === 0) {
+      finalizar({});
+      return;
+    }
+    setMostrarFormFinalizar(true);
+  }
+
+  function handleConfirmarFinalizarComPendentes() {
+    setAcaoErro(null);
+    if (!tipoOcorrenciaFinalId) return setAcaoErro("Selecione o motivo dos pedidos não entregues.");
+    const tipo = tiposNaoEntrega?.find((t) => String(t.id) === tipoOcorrenciaFinalId);
+    if (tipo?.exige_observacao && !observacaoFinal) return setAcaoErro("Este motivo exige uma descrição.");
+    finalizar({ tipo_ocorrencia_id: Number(tipoOcorrenciaFinalId), observacao: observacaoFinal || undefined });
+  }
+
   if (carregandoAuth || carregando) return <p className="text-sm text-kami-charcoal-light">Carregando...</p>;
   if (erro) return <p className="text-sm text-kami-red">{erro}</p>;
   if (!romaneio) return null;
 
   const pedidosOrdenados = romaneio.pedidos.slice().sort((a, b) => a.sequencia_atual - b.sequencia_atual);
-  const proximoPendente = pedidosOrdenados.find((p) => p.status_entrega === "pendente" || p.status_entrega === "em_rota");
+  const pendentes = pedidosOrdenados.filter((p) => p.status_entrega === "pendente" || p.status_entrega === "em_rota");
+  const proximoPendente = pendentes[0];
 
   return (
     <div className="flex flex-col gap-4">
@@ -191,14 +214,73 @@ export function RomaneioExecucaoHub({ romaneioId }: { romaneioId: number }) {
         </>
       )}
 
-      {romaneio.status === "em_transito" && (
+      {romaneio.status === "em_transito" && !mostrarFormFinalizar && (
         <button
-          onClick={handleFinalizarRomaneio}
+          onClick={() => handleCliqueFinalizar(pendentes)}
           disabled={enviando}
           className="rounded-xl bg-kami-red px-4 py-3 text-center text-sm font-medium text-white disabled:opacity-60"
         >
           {enviando ? "Finalizando..." : "Finalizar romaneio"}
         </button>
+      )}
+
+      {romaneio.status === "em_transito" && mostrarFormFinalizar && (
+        <div className="flex flex-col gap-3 rounded-xl border border-kami-red/30 bg-kami-red/5 p-3">
+          <p className="text-sm font-medium text-kami-charcoal">
+            {pendentes.length} pedido(s) ainda não confirmado(s) — serão marcados como não entregues:
+          </p>
+          <ul className="flex flex-col gap-1 text-xs text-kami-charcoal-light">
+            {pendentes.map((p) => (
+              <li key={p.id}>
+                {p.sequencia_atual}. {p.cliente_nome} — {p.cliente_endereco}
+              </li>
+            ))}
+          </ul>
+
+          <label className="flex flex-col gap-1 text-sm">
+            Motivo
+            <select
+              value={tipoOcorrenciaFinalId}
+              onChange={(e) => setTipoOcorrenciaFinalId(e.target.value)}
+              className="rounded-lg border border-black/10 px-3 py-2 outline-none focus:border-kami-red"
+            >
+              <option value="">Selecione...</option>
+              {tiposNaoEntrega?.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.descricao}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex flex-col gap-1 text-sm">
+            Detalhes
+            <textarea
+              value={observacaoFinal}
+              onChange={(e) => setObservacaoFinal(e.target.value)}
+              rows={3}
+              placeholder="Descreva o que aconteceu com esses pedidos"
+              className="rounded-lg border border-black/10 px-3 py-2 outline-none focus:border-kami-red"
+            />
+          </label>
+
+          <div className="flex gap-2">
+            <button
+              onClick={() => setMostrarFormFinalizar(false)}
+              disabled={enviando}
+              className="flex-1 rounded-lg border border-black/10 px-3 py-2 text-sm font-medium text-kami-charcoal"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleConfirmarFinalizarComPendentes}
+              disabled={enviando}
+              className="flex-1 rounded-lg bg-kami-red px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+            >
+              {enviando ? "Finalizando..." : "Confirmar e finalizar"}
+            </button>
+          </div>
+        </div>
       )}
 
       {MENSAGEM_FINALIZADO[romaneio.status] && (
