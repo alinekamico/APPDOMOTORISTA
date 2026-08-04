@@ -51,11 +51,18 @@ export function EntregaForm({ romaneioId, pedidoId }: { romaneioId: number; pedi
 
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const erroRef = useRef<HTMLParagraphElement>(null);
 
   useEffect(() => {
     capturar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // No celular, o formulário é mais alto que a tela — sem isso, o erro aparece
+  // fora da área visível quando o motorista confirma rolado até o botão no final.
+  useEffect(() => {
+    if (erro) erroRef.current?.scrollIntoView({ block: "center" });
+  }, [erro]);
 
   useEffect(() => {
     if (pedido) {
@@ -171,7 +178,11 @@ export function EntregaForm({ romaneioId, pedidoId }: { romaneioId: number; pedi
         </button>
       </div>
 
-      {erro && <p className="text-sm text-kami-red">{erro}</p>}
+      {erro && (
+        <p ref={erroRef} className="rounded-lg bg-kami-red/10 px-3 py-2 text-sm font-medium text-kami-red">
+          {erro}
+        </p>
+      )}
 
       {modo === "entrega" ? (
         <div className="flex flex-col gap-4">
@@ -252,6 +263,8 @@ export function EntregaForm({ romaneioId, pedidoId }: { romaneioId: number; pedi
               className="rounded-lg border border-black/10 px-3 py-2 outline-none focus:border-kami-red"
             />
           </label>
+
+          {erro && <p className="rounded-lg bg-kami-red/10 px-3 py-2 text-sm font-medium text-kami-red">{erro}</p>}
 
           <button
             onClick={handleConfirmarEntrega}

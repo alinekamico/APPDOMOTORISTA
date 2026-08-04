@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 
 export type AssinaturaCanvasHandle = {
   obterAssinatura: () => Promise<File | null>;
@@ -8,10 +8,33 @@ export type AssinaturaCanvasHandle = {
   temAssinatura: () => boolean;
 };
 
+const ALTURA_CSS_PX = 160;
+
 export const AssinaturaCanvas = forwardRef<AssinaturaCanvasHandle>(function AssinaturaCanvas(_props, ref) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const desenhandoRef = useRef(false);
   const [vazio, setVazio] = useState(true);
+
+  // O canvas precisa ter a resolução interna (width/height) igual ao tamanho exibido
+  // (que varia por tela, já que a largura é responsiva) — senão o toque registra na
+  // posição errada em qualquer celular com largura diferente de 340px.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    function ajustarResolucao() {
+      const dpr = window.devicePixelRatio || 1;
+      const larguraCss = canvas!.clientWidth;
+      canvas!.width = larguraCss * dpr;
+      canvas!.height = ALTURA_CSS_PX * dpr;
+      const ctx = canvas!.getContext("2d");
+      ctx?.scale(dpr, dpr);
+    }
+
+    ajustarResolucao();
+    window.addEventListener("resize", ajustarResolucao);
+    return () => window.removeEventListener("resize", ajustarResolucao);
+  }, []);
 
   function posicaoRelativa(e: React.PointerEvent<HTMLCanvasElement>) {
     const canvas = canvasRef.current!;
