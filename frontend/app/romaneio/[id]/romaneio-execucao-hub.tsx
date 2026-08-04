@@ -70,6 +70,27 @@ export function RomaneioExecucaoHub({ romaneioId }: { romaneioId: number }) {
     }
   }
 
+  async function handleReordenarRota() {
+    setAcaoErro(null);
+    setEnviando(true);
+    try {
+      const posicao = await capturar();
+      if (!posicao) {
+        setAcaoErro("Não foi possível obter sua localização atual.");
+        return;
+      }
+      await apiFetch(`/romaneios/${romaneioId}/resequenciar`, {
+        method: "POST",
+        body: { posicao_lat: posicao.lat, posicao_lng: posicao.lng },
+      });
+      recarregar();
+    } catch (err) {
+      setAcaoErro(err instanceof ApiError ? err.detail : "Não foi possível reordenar a rota.");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
   if (carregandoAuth || carregando) return <p className="text-sm text-kami-charcoal-light">Carregando...</p>;
   if (erro) return <p className="text-sm text-kami-red">{erro}</p>;
   if (!romaneio) return null;
@@ -122,24 +143,33 @@ export function RomaneioExecucaoHub({ romaneioId }: { romaneioId: number }) {
       )}
 
       {romaneio.status === "em_transito" && proximoPendente && (
-        <div className="flex gap-2">
-          <a
-            href={linkGoogleMaps(proximoPendente)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex-1 rounded-lg border border-black/10 bg-white px-3 py-2 text-center text-sm font-medium text-kami-charcoal"
+        <>
+          <div className="flex gap-2">
+            <a
+              href={linkGoogleMaps(proximoPendente)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 rounded-lg border border-black/10 bg-white px-3 py-2 text-center text-sm font-medium text-kami-charcoal"
+            >
+              Abrir no Google Maps
+            </a>
+            <a
+              href={linkWaze(proximoPendente)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 rounded-lg border border-black/10 bg-white px-3 py-2 text-center text-sm font-medium text-kami-charcoal"
+            >
+              Abrir no Waze
+            </a>
+          </div>
+          <button
+            onClick={handleReordenarRota}
+            disabled={enviando}
+            className="rounded-lg border border-dashed border-kami-red/40 px-3 py-2 text-center text-sm font-medium text-kami-red disabled:opacity-60"
           >
-            Abrir no Google Maps
-          </a>
-          <a
-            href={linkWaze(proximoPendente)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex-1 rounded-lg border border-black/10 bg-white px-3 py-2 text-center text-sm font-medium text-kami-charcoal"
-          >
-            Abrir no Waze
-          </a>
-        </div>
+            {enviando ? "Recalculando..." : "Reordenar rota a partir da minha posição"}
+          </button>
+        </>
       )}
 
       {["concluido", "romaneio_incompleto", "romaneio_com_problema"].includes(romaneio.status) && (
