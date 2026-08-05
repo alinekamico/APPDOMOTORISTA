@@ -690,3 +690,138 @@ def definir_transportadora_inicial(
     db.commit()
     db.refresh(romaneio)
     return romaneio
+
+
+def clonar_pedidos_pendentes(db: Session, *, romaneio_original: Romaneio, usuario_atual: Usuario) -> Romaneio:
+    """Romaneio incompleto/com problema: cria um romaneio novo só com os pedidos que ainda
+    não foram entregues (pendente, em rota ou não entregue), de volta em 'definição de
+    transporte' pra transportadora indicar outro veículo/motorista. O romaneio original fica
+    intocado, preservado como histórico do que aconteceu."""
+    if romaneio_original.status not in {StatusRomaneio.ROMANEIO_INCOMPLETO, StatusRomaneio.ROMANEIO_COM_PROBLEMA}:
+        raise TransicaoInvalidaError(
+            "Só é possível reenviar pedidos pendentes de um romaneio incompleto ou com problema"
+        )
+
+    pendentes = sorted(
+        (p for p in romaneio_original.pedidos if p.status_entrega != StatusEntregaPedido.ENTREGUE),
+        key=lambda p: p.sequencia_atual,
+    )
+    if not pendentes:
+        raise RecursoInvalidoError("Não há pedidos pendentes de entrega neste romaneio pra reenviar")
+
+    codigo_base = f"{romaneio_original.codigo}-R"
+    numero = 2
+    while db.scalar(select(Romaneio).where(Romaneio.codigo == f"{codigo_base}{numero}")):
+        numero += 1
+    novo_codigo = f"{codigo_base}{numero}"
+
+    qtd_caixas = sum(p.qtd_volumes or 0 for p in pendentes)
+    peso_total = sum(float(p.peso_kg) for p in pendentes if p.peso_kg is not None)
+
+    novo_romaneio = Romaneio(
+        codigo=novo_codigo,
+        transportadora_id=romaneio_original.transportadora_id,
+        transportadora_cnpj_externo=romaneio_original.transportadora_cnpj_externo,
+        status=StatusRomaneio.DEFINICAO_TRANSPORTE,
+        origem=romaneio_original.origem,
+        tms_referencia_externa=romaneio_original.tms_referencia_externa,
+        qtd_caixas=qtd_caixas or None,
+        qtd_pedidos=len(pendentes),
+        peso_total=peso_total or None,
+        tipo_veiculo_sugerido=romaneio_original.tipo_veiculo_sugerido,
+        empresa_nome=romaneio_original.empresa_nome,
+        empresa_uf=romaneio_original.empresa_uf,
+        romaneio_origem_id=romaneio_original.id,
+    )
+    db.add(novo_romaneio)
+    db.flush()
+
+    for posicao, pedido in enumerate(pendentes, start=1):
+        db.add(
+            Pedido(
+                romaneio_id=novo_romaneio.id,
+                sequencia_original=posicao,
+                sequencia_atual=posicao,
+                status_entrega=StatusEntregaPedido.PENDENTE,
+                cliente_nome=pedido.cliente_nome,
+                cliente_endereco=pedido.cliente_endereco,
+                cliente_lat=pedido.cliente_lat,
+                cliente_lng=pedido.cliente_lng,
+                cliente_whatsapp=pedido.cliente_whatsapp,
+                cliente_email=pedido.cliente_email,
+                peso_kg=pedido.peso_kg,
+                qtd_volumes=pedido.qtd_volumes,
+                especie_volume=pedido.especie_volume,
+                dt_entrega_solicitada=pedido.dt_entrega_solicitada,
+            )
+        )
+
+    auditoria_service.registrar(
+        db,
+        usuario_id=usuario_atual.id,
+        entidade="romaneios",
+        entidade_id=novo_romaneio.id,
+        acao=AcaoAuditoria.CREATE,
+        dados_depois={
+            "clonado_de_romaneio_id": romaneio_original.id,
+            "codigo": novo_codigo,
+            "qtd_pedidos": len(pendentes),
+        },
+    )
+
+    db.commit()
+    db.refresh(novo_romaneio)
+    return novo_romaneio
+
+
+def obter_historico(db: Session, *, romaneio: Romaneio) -> list[dict]:
+    """Consolida historico_etapas + eventos de entrega (por pedido) + resequenciamentos numa
+    única timeline cronológica — dá visibilidade completa de tudo que aconteceu com o
+    romaneio (mudança de etapa, cada entrega/não entrega, cada recálculo de rota) sem
+    precisar cruzar 3 telas/tabelas diferentes."""
+    eventos: list[dict] = []
+
+    for h in romaneio.historico_etapas:
+        eventos.append(
+            {
+                "tipo": "etapa",
+                "criado_em": h.criado_em,
+                "usuario_nome": h.usuario.nome if h.usuario else None,
+                "papel_usuario": h.papel_usuario,
+                "etapa_anterior": h.etapa_anterior,
+                "etapa_nova": h.etapa_nova,
+                "observacao": h.observacao,
+            }
+        )
+
+    for pedido in romaneio.pedidos:
+        for evento in pedido.eventos_entrega:
+            eventos.append(
+                {
+                    "tipo": "entrega" if evento.tipo == TipoEventoEntrega.ENTREGUE else "nao_entregue",
+                    "criado_em": evento.criado_em,
+                    "usuario_nome": evento.motorista.usuario.nome if evento.motorista else None,
+                    "papel_usuario": "motorista",
+                    "observacao": evento.observacao,
+                    "pedido_id": pedido.id,
+                    "pedido_cliente_nome": pedido.cliente_nome,
+                    "pedido_sequencia": pedido.sequencia_atual,
+                    "tipo_ocorrencia_descricao": evento.tipo_ocorrencia.descricao if evento.tipo_ocorrencia else None,
+                }
+            )
+
+    for r in romaneio.resequenciamentos:
+        eventos.append(
+            {
+                "tipo": "resequenciamento",
+                "criado_em": r.criado_em,
+                "usuario_nome": r.usuario.nome if r.usuario else None,
+                "papel_usuario": "motorista",
+                "observacao": r.observacao,
+                "resequenciamento_origem": r.origem.value if r.origem else None,
+                "resequenciamento_qtd_paradas": len(r.sequencia_depois) if r.sequencia_depois else None,
+            }
+        )
+
+    eventos.sort(key=lambda e: e["criado_em"])
+    return eventos

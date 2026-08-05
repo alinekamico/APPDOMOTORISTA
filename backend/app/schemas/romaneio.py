@@ -90,6 +90,8 @@ class RomaneioOut(BaseModel):
     data_saida_prevista: datetime | None = None
     empresa_nome: str | None = None
     empresa_uf: str | None = None
+    romaneio_origem_id: int | None = None
+    romaneio_origem_codigo: str | None = None
     fotos_carregamento: list[FotoCarregamentoOut] = []
     criado_em: datetime
     pedidos: list[PedidoOut] = []
@@ -169,3 +171,24 @@ class FinalizarRomaneioRequest(BaseModel):
 
     tipo_ocorrencia_id: int | None = None
     observacao: str | None = None
+
+
+class HistoricoEventoOut(BaseModel):
+    """Um item da timeline consolidada do romaneio — pode ser uma transição de etapa, uma
+    entrega/não entrega de pedido, ou um recálculo de rota, conforme `tipo`."""
+
+    tipo: str  # "etapa" | "entrega" | "nao_entregue" | "resequenciamento"
+    criado_em: datetime
+    usuario_nome: str | None = None
+    papel_usuario: str | None = None
+    etapa_anterior: StatusRomaneio | None = None
+    etapa_nova: StatusRomaneio | None = None
+    observacao: str | None = None
+    pedido_id: int | None = None
+    pedido_cliente_nome: str | None = None
+    pedido_sequencia: int | None = None
+    tipo_ocorrencia_descricao: str | None = None
+    resequenciamento_origem: str | None = None
+    resequenciamento_qtd_paradas: int | None = None
+
+    model_config = {"from_attributes": True}

@@ -46,12 +46,20 @@ class Romaneio(Base):
     empresa_nome: Mapped[str | None] = mapped_column(String(120), nullable=True)
     empresa_uf: Mapped[str | None] = mapped_column(String(2), nullable=True)
 
+    # Quando um romaneio incompleto/com problema tem seus pedidos pendentes clonados pra um
+    # novo romaneio (reenvio), esse campo aponta pro romaneio original — que fica intacto,
+    # preservado como histórico.
+    romaneio_origem_id: Mapped[int | None] = mapped_column(ForeignKey("romaneios.id"), nullable=True)
+
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
     conferencia_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     carregamento_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     inicio_rota_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     concluido_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
+    romaneio_origem: Mapped["Romaneio | None"] = relationship(
+        "Romaneio", remote_side=[id], foreign_keys=[romaneio_origem_id]
+    )
     transportadora: Mapped["Transportadora | None"] = relationship(back_populates="romaneios")
     veiculo: Mapped["Veiculo | None"] = relationship()
     motorista: Mapped["Motorista | None"] = relationship()
@@ -77,3 +85,7 @@ class Romaneio(Base):
     @property
     def veiculo_placa(self) -> str | None:
         return self.veiculo.placa if self.veiculo else None
+
+    @property
+    def romaneio_origem_codigo(self) -> str | None:
+        return self.romaneio_origem.codigo if self.romaneio_origem else None

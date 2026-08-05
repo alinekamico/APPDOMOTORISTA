@@ -42,3 +42,4 @@ class EventoEntrega(Base):
 
     pedido: Mapped["Pedido"] = relationship(back_populates="eventos_entrega")
     motorista: Mapped["Motorista"] = relationship()
+    tipo_ocorrencia: Mapped["TipoOcorrencia | None"] = relationship()

@@ -15,6 +15,7 @@ from app.schemas.romaneio import (
     DefinirTransportadoraRequest,
     DevolverParaTransporteRequest,
     FinalizarRomaneioRequest,
+    HistoricoEventoOut,
     InserirPedidosRequest,
     ReportarProblemaRequest,
     ResequenciarRequest,
@@ -76,12 +77,7 @@ def importar_uno(
     return resultado.to_dict()
 
 
-@router.get("/{romaneio_id}", response_model=RomaneioOut)
-def detalhar(
-    romaneio_id: int,
-    db: Session = Depends(get_db),
-    usuario_atual: Usuario = Depends(require_roles(Papel.KAMI_ADMIN, Papel.TRANSPORTADORA_ADMIN, Papel.MOTORISTA)),
-) -> Romaneio:
+def _buscar_romaneio_visivel(db: Session, romaneio_id: int, usuario_atual: Usuario) -> Romaneio:
     romaneio = romaneio_service.buscar_com_pedidos(db, romaneio_id)
     if romaneio is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Romaneio não encontrado")
@@ -92,6 +88,25 @@ def detalhar(
         if motorista is None or romaneio.motorista_id != motorista.id:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Romaneio não encontrado")
     return romaneio
+
+
+@router.get("/{romaneio_id}", response_model=RomaneioOut)
+def detalhar(
+    romaneio_id: int,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(require_roles(Papel.KAMI_ADMIN, Papel.TRANSPORTADORA_ADMIN, Papel.MOTORISTA)),
+) -> Romaneio:
+    return _buscar_romaneio_visivel(db, romaneio_id, usuario_atual)
+
+
+@router.get("/{romaneio_id}/historico", response_model=list[HistoricoEventoOut])
+def historico(
+    romaneio_id: int,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(require_roles(Papel.KAMI_ADMIN, Papel.TRANSPORTADORA_ADMIN, Papel.MOTORISTA)),
+) -> list[dict]:
+    romaneio = _buscar_romaneio_visivel(db, romaneio_id, usuario_atual)
+    return romaneio_service.obter_historico(db, romaneio=romaneio)
 
 
 @router.post("", response_model=RomaneioOut, status_code=status.HTTP_201_CREATED)
@@ -130,6 +145,23 @@ def alterar_transportadora(
     except romaneio_service.TransicaoInvalidaError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except romaneio_service.TransportadoraInvalidaError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
+
+@router.post("/{romaneio_id}/clonar-pendentes", response_model=RomaneioOut, status_code=status.HTTP_201_CREATED)
+def clonar_pendentes(
+    romaneio_id: int,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(require_roles(Papel.KAMI_ADMIN, Papel.TRANSPORTADORA_ADMIN)),
+) -> Romaneio:
+    """Romaneio incompleto/com problema: cria um novo romaneio só com os pedidos ainda não
+    entregues, de volta em 'definição de transporte'. O original fica intacto (histórico)."""
+    romaneio = _buscar_romaneio_do_tenant(db, romaneio_id, usuario_atual)
+    try:
+        return romaneio_service.clonar_pedidos_pendentes(db, romaneio_original=romaneio, usuario_atual=usuario_atual)
+    except romaneio_service.TransicaoInvalidaError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except romaneio_service.RecursoInvalidoError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
 
 

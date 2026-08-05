@@ -1,10 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useRequireRole } from "@/lib/roles";
 import { useFetch } from "@/lib/use-fetch";
 import { apiFetch, ApiError } from "@/lib/api-client";
 import { COLUNAS } from "@/components/kanban/types";
+import { HistoricoTimeline } from "@/components/romaneio/HistoricoTimeline";
 
 type Pedido = {
   id: number;
@@ -42,6 +45,8 @@ type RomaneioDetalheType = {
   data_saida_prevista: string | null;
   empresa_nome: string | null;
   empresa_uf: string | null;
+  romaneio_origem_id: number | null;
+  romaneio_origem_codigo: string | null;
   fotos_carregamento: FotoCarregamento[];
   pedidos: Pedido[];
 };
@@ -55,6 +60,7 @@ const LABEL_STATUS: Record<string, string> = Object.fromEntries(
 );
 
 export function RomaneioDetalhe({ romaneioId }: { romaneioId: number }) {
+  const router = useRouter();
   const { usuario, carregando: carregandoAuth } = useRequireRole([
     "kami_admin",
     "transportadora_admin",
@@ -94,6 +100,9 @@ export function RomaneioDetalhe({ romaneioId }: { romaneioId: number }) {
   const [mostrarNovoPedido, setMostrarNovoPedido] = useState(false);
   const [novoPedidoNome, setNovoPedidoNome] = useState("");
   const [novoPedidoEndereco, setNovoPedidoEndereco] = useState("");
+
+  const [clonando, setClonando] = useState(false);
+  const [mostrarHistorico, setMostrarHistorico] = useState(false);
 
   function handlePedirConfirmacaoAlocar(e: React.FormEvent) {
     e.preventDefault();
@@ -215,6 +224,21 @@ export function RomaneioDetalhe({ romaneioId }: { romaneioId: number }) {
     }
   }
 
+  async function handleClonarPendentes() {
+    setAcaoErro(null);
+    setClonando(true);
+    try {
+      const novo = await apiFetch<{ id: number; codigo: string }>(`/romaneios/${romaneioId}/clonar-pendentes`, {
+        method: "POST",
+      });
+      router.push(`/romaneios/${novo.id}`);
+    } catch (err) {
+      setAcaoErro(err instanceof ApiError ? err.detail : "Não foi possível reenviar os pedidos pendentes.");
+    } finally {
+      setClonando(false);
+    }
+  }
+
   if (carregandoAuth || carregando) return <p className="text-sm text-kami-charcoal-light">Carregando...</p>;
   if (erro) return <p className="text-sm text-kami-red">{erro}</p>;
   if (!romaneio) return null;
@@ -241,6 +265,15 @@ export function RomaneioDetalhe({ romaneioId }: { romaneioId: number }) {
           {LABEL_STATUS[romaneio.status] ?? romaneio.status}
         </span>
       </div>
+
+      {romaneio.romaneio_origem_id && (
+        <p className="mb-4 text-xs text-kami-charcoal-light">
+          Reenvio dos pedidos pendentes do romaneio{" "}
+          <Link href={`/romaneios/${romaneio.romaneio_origem_id}`} className="font-medium text-kami-red hover:underline">
+            {romaneio.romaneio_origem_codigo}
+          </Link>
+        </p>
+      )}
 
       <div className="mb-6 grid grid-cols-2 gap-3 rounded-xl border border-black/10 bg-white p-4 text-sm sm:grid-cols-4">
         <div>
@@ -278,6 +311,26 @@ export function RomaneioDetalhe({ romaneioId }: { romaneioId: number }) {
       </div>
 
       {acaoErro && <p className="mb-3 text-sm text-kami-red">{acaoErro}</p>}
+
+      {(usuario?.papel === "kami_admin" || usuario?.papel === "transportadora_admin") &&
+        ["romaneio_incompleto", "romaneio_com_problema"].includes(romaneio.status) &&
+        romaneio.pedidos.some((p) => p.status_entrega !== "entregue") && (
+          <div className="mb-6 flex flex-col gap-2 rounded-xl border border-black/10 bg-white p-4">
+            <h2 className="text-sm font-semibold text-kami-charcoal">Reenviar pedidos pendentes</h2>
+            <p className="text-sm text-kami-charcoal-light">
+              Cria um novo romaneio só com os pedidos ainda não entregues, de volta em
+              &ldquo;Definição de Transporte&rdquo; pra indicar outro veículo/motorista. Este romaneio (
+              {romaneio.codigo}) fica como está, guardado como histórico.
+            </p>
+            <button
+              onClick={handleClonarPendentes}
+              disabled={clonando}
+              className="self-start rounded-lg bg-kami-red px-3 py-1.5 text-sm font-medium text-white hover:bg-kami-red-dark disabled:opacity-60"
+            >
+              {clonando ? "Reenviando..." : "Reenviar pedidos pendentes"}
+            </button>
+          </div>
+        )}
 
       {podeDefinirTransportadora && (
         <form
@@ -579,6 +632,23 @@ export function RomaneioDetalhe({ romaneioId }: { romaneioId: number }) {
               </li>
             ))}
         </ul>
+      </div>
+
+      <div className="mt-6 rounded-xl border border-black/10 bg-white">
+        <button
+          onClick={() => setMostrarHistorico((v) => !v)}
+          className="flex w-full items-center justify-between px-4 py-3 text-sm font-semibold text-kami-charcoal"
+        >
+          Histórico completo
+          <span className="text-xs font-normal text-kami-charcoal-light">
+            {mostrarHistorico ? "ocultar ▲" : "mostrar ▼"}
+          </span>
+        </button>
+        {mostrarHistorico && (
+          <div className="border-t border-black/10 px-4 py-4">
+            <HistoricoTimeline romaneioId={romaneioId} />
+          </div>
+        )}
       </div>
     </div>
   );

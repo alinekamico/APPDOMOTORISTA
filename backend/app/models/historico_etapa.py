@@ -26,3 +26,4 @@ class HistoricoEtapa(Base):
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
 
     romaneio: Mapped["Romaneio"] = relationship(back_populates="historico_etapas")
+    usuario: Mapped["Usuario | None"] = relationship()
