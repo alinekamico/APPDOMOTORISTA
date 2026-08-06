@@ -11,7 +11,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             KAMI CO. · Romaneios
           </p>
         </div>
-        {children}
+        <div className="rounded-2xl border border-black/10 bg-white p-6 shadow-sm">{children}</div>
       </div>
     </div>
   );
