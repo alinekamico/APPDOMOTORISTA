@@ -8,7 +8,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-ARG NEXT_PUBLIC_API_URL=http://localhost:8000
+# Default aponta pra produção — em dev local, sobrescreva com --build-arg
+# NEXT_PUBLIC_API_URL=http://localhost:8000/api (ou rode via `npm run dev`, que lê o .env local).
+ARG NEXT_PUBLIC_API_URL=https://appdomotorista.kamicosolucoes.com.br/api
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
 RUN npm run build
